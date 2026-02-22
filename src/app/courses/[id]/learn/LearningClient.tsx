@@ -1,0 +1,371 @@
+"use client";
+
+import { useState } from "react";
+
+interface Lesson {
+  _id: string;
+  title: string;
+  videoUrl?: string;
+  content?: string;
+  resources?: Array<{ name: string; type: string; url: string }>;
+}
+
+interface Module {
+  _id: string;
+  title: string;
+}
+
+interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctIndex: number;
+}
+
+interface Quiz {
+  _id: string;
+  title: string;
+  questions: QuizQuestion[];
+  passMarkPercent: number;
+}
+
+interface Enrollment {
+  completedLessons: string[];
+  progressPercent: number;
+  completed: boolean;
+  quizScore?: number;
+  quizPassed?: boolean;
+}
+
+interface Certificate {
+  _id: string;
+  fileUrl: string;
+}
+
+interface Props {
+  courseId: string;
+  course: { title: string };
+  modules: Module[];
+  lessons: Lesson[];
+  quiz: Quiz | null;
+  enrollment: Enrollment;
+  certificate: Certificate | null;
+}
+
+export default function LearningClient({
+  courseId,
+  course,
+  modules,
+  lessons,
+  quiz,
+  enrollment: initialEnrollment,
+  certificate: initialCertificate,
+}: Props) {
+  const [enrollment, setEnrollment] = useState(initialEnrollment);
+  const [certificate, setCertificate] = useState(initialCertificate);
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(
+    lessons[0] || null
+  );
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [quizResult, setQuizResult] = useState<{
+    scorePercent: number;
+    passed: boolean;
+    correct: number;
+    total: number;
+    passMarkPercent: number;
+  } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const completedIds = new Set(enrollment.completedLessons || []);
+
+  async function markComplete(lessonId: string) {
+    const res = await fetch(`/api/enrollments/${courseId}/progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lessonId }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setEnrollment((prev) => ({
+        ...prev,
+        completedLessons: data.completedLessons,
+        progressPercent: data.progressPercent,
+        completed: data.completed,
+      }));
+      if (data.completed) {
+        // Fetch certificate
+        const certRes = await fetch(`/api/courses/${courseId}`);
+        if (certRes.ok) {
+          const certData = await certRes.json();
+          if (certData.certificate) setCertificate(certData.certificate);
+        }
+      }
+    }
+  }
+
+  async function submitQuiz() {
+    if (!quiz) return;
+    setSubmitting(true);
+    const answers = quiz.questions.map((_, i) => quizAnswers[i] ?? -1);
+    const res = await fetch(`/api/quizzes/${quiz._id}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers, courseId }),
+    });
+    setSubmitting(false);
+    if (res.ok) {
+      const data = await res.json();
+      setQuizResult(data);
+      setEnrollment((prev) => ({
+        ...prev,
+        quizScore: data.scorePercent,
+        quizPassed: data.passed,
+        completed: data.completed,
+      }));
+    }
+  }
+
+  // Build module->lessons map properly
+  const lessonsByModule: Record<string, Lesson[]> = {};
+  for (const l of lessons) {
+    const lessonAny = l as Lesson & { module?: string };
+    const moduleId = lessonAny.module || "";
+    if (!lessonsByModule[moduleId]) lessonsByModule[moduleId] = [];
+    lessonsByModule[moduleId].push(l);
+  }
+
+  const allQuestionsAnswered =
+    quiz !== null &&
+    Object.keys(quizAnswers).length >= quiz.questions.length;
+
+  return (
+    <div className="flex h-[calc(100vh-4rem)]">
+      {/* Sidebar */}
+      <div className="w-72 bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0">
+        <div className="p-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900 text-sm truncate">
+            {course.title}
+          </h2>
+          <div className="mt-2">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Progress</span>
+              <span>{enrollment.progressPercent}%</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-1.5">
+              <div
+                className="bg-blue-600 h-1.5 rounded-full transition-all"
+                style={{ width: `${enrollment.progressPercent}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="p-2">
+          {modules.map((m) => (
+            <div key={m._id} className="mb-3">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                {m.title}
+              </div>
+              {(lessonsByModule[m._id] || []).map((l) => (
+                <button
+                  key={l._id}
+                  onClick={() => {
+                    setActiveLesson(l);
+                    setShowQuiz(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
+                    activeLesson?._id === l._id
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="text-xs">
+                    {completedIds.has(l._id) ? "✅" : "○"}
+                  </span>
+                  <span className="truncate">{l.title}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+
+          {quiz && (
+            <button
+              onClick={() => setShowQuiz(true)}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors mt-2 ${
+                showQuiz
+                  ? "bg-purple-50 text-purple-700"
+                  : "text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <span className="text-xs">📝</span>
+              <span>{quiz.title}</span>
+              {enrollment.quizPassed && (
+                <span className="ml-auto text-xs text-green-600">✅</span>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 overflow-y-auto">
+        {showQuiz && quiz ? (
+          <div className="max-w-3xl mx-auto px-6 py-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{quiz.title}</h2>
+            <p className="text-gray-500 text-sm mb-6">
+              Pass mark: {quiz.passMarkPercent}%
+            </p>
+
+            {quizResult ? (
+              <div
+                className={`rounded-xl p-6 mb-6 ${
+                  quizResult.passed
+                    ? "bg-green-50 border border-green-200"
+                    : "bg-red-50 border border-red-200"
+                }`}
+              >
+                <div className="text-2xl font-bold mb-2">
+                  {quizResult.passed ? "🎉 Passed!" : "❌ Not passed"}
+                </div>
+                <p className="text-gray-700">
+                  You scored {quizResult.correct}/{quizResult.total} (
+                  {quizResult.scorePercent}%). Pass mark:{" "}
+                  {quizResult.passMarkPercent}%.
+                </p>
+                {!quizResult.passed && (
+                  <button
+                    onClick={() => {
+                      setQuizResult(null);
+                      setQuizAnswers({});
+                    }}
+                    className="mt-3 text-blue-600 text-sm font-medium hover:underline"
+                  >
+                    Try again
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {quiz.questions.map((q, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-5">
+                    <p className="font-medium text-gray-900 mb-4">
+                      {i + 1}. {q.question}
+                    </p>
+                    <div className="space-y-2">
+                      {q.options.map((opt, j) => (
+                        <label
+                          key={j}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            quizAnswers[i] === j
+                              ? "border-blue-500 bg-blue-50"
+                              : "border-gray-200 hover:bg-gray-50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`q-${i}`}
+                            value={j}
+                            checked={quizAnswers[i] === j}
+                            onChange={() =>
+                              setQuizAnswers((prev) => ({ ...prev, [i]: j }))
+                            }
+                            className="text-blue-600"
+                          />
+                          <span className="text-sm text-gray-700">{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={submitQuiz}
+                  disabled={submitting || !allQuestionsAnswered}
+                  className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {submitting ? "Submitting..." : "Submit Quiz"}
+                </button>
+              </div>
+            )}
+
+            {enrollment.completed && certificate && (
+              <div className="mt-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                <div className="text-2xl mb-2">🏆</div>
+                <h3 className="font-semibold text-gray-900 mb-1">
+                  Certificate earned!
+                </h3>
+                <a
+                  href={certificate.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 text-sm font-medium hover:underline"
+                >
+                  Download your certificate →
+                </a>
+              </div>
+            )}
+          </div>
+        ) : activeLesson ? (
+          <div className="max-w-4xl mx-auto px-6 py-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">
+              {activeLesson.title}
+            </h2>
+
+            {activeLesson.videoUrl && (
+              <div className="mb-6 aspect-video bg-black rounded-xl overflow-hidden">
+                <iframe
+                  src={activeLesson.videoUrl}
+                  className="w-full h-full"
+                  allowFullScreen
+                  title={activeLesson.title}
+                />
+              </div>
+            )}
+
+            {activeLesson.content && (
+              <div className="prose max-w-none mb-6 text-gray-700">
+                <p>{activeLesson.content}</p>
+              </div>
+            )}
+
+            {activeLesson.resources && activeLesson.resources.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-900 mb-3">Resources</h3>
+                <div className="space-y-2">
+                  {activeLesson.resources.map((r, i) => (
+                    <a
+                      key={i}
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-blue-600 hover:underline text-sm"
+                    >
+                      <span>{r.type === "file" ? "📎" : "🔗"}</span>
+                      {r.name}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!completedIds.has(activeLesson._id) ? (
+              <button
+                onClick={() => markComplete(activeLesson._id)}
+                className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors"
+              >
+                Mark as Complete ✓
+              </button>
+            ) : (
+              <div className="text-green-600 font-medium text-sm">
+                ✅ Lesson completed
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            Select a lesson to start learning
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
