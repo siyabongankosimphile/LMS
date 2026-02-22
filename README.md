@@ -54,8 +54,8 @@ A full-featured LMS built with **Next.js 14 App Router**, **NextAuth v4**, **Mon
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/siyabongankosimphile/Learning-management-system.git
-cd Learning-management-system
+git clone https://github.com/siyabongankosimphile/LMS.git
+cd LMS
 npm install
 ```
 
