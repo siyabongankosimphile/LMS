@@ -16,16 +16,41 @@ interface Module {
 }
 
 interface QuizQuestion {
+  type:
+    | "MCQ"
+    | "DESCRIPTIVE"
+    | "MULTIPLE_CHOICE"
+    | "TRUE_FALSE"
+    | "SHORT_ANSWER"
+    | "MATCHING"
+    | "ESSAY";
+  name?: string;
   question: string;
-  options: string[];
-  correctIndex: number;
+  marks?: number;
+  options?: string[];
+  correctIndex?: number;
+  acceptedAnswers?: string[];
+  matchingPairs?: Array<{ left: string; right: string }>;
+  selfMarkingGuidance?: string;
+  feedback?: string;
 }
 
 interface Quiz {
   _id: string;
   title: string;
+  description?: string;
   questions: QuizQuestion[];
   passMarkPercent: number;
+  openAt?: string;
+  closeAt?: string;
+  timeLimitMinutes?: number;
+  attemptsAllowed?: number;
+  questionsPerPage?: number;
+  reviewOptions?: {
+    showMarks?: boolean;
+    showCorrectAnswers?: boolean;
+    showFeedback?: boolean;
+  };
 }
 
 interface Enrollment {
@@ -34,6 +59,7 @@ interface Enrollment {
   completed: boolean;
   quizScore?: number;
   quizPassed?: boolean;
+  quizAttempts?: number;
 }
 
 interface Certificate {
@@ -98,13 +124,26 @@ export default function LearningClient({
     lessons[0] || null
   );
   const [showQuiz, setShowQuiz] = useState(false);
-  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, unknown>>({});
+  const [quizStartedAt, setQuizStartedAt] = useState<string>("");
+  const [quizPage, setQuizPage] = useState(1);
   const [quizResult, setQuizResult] = useState<{
     scorePercent: number;
     passed: boolean;
     correct: number;
     total: number;
     passMarkPercent: number;
+    attemptsUsed?: number;
+    attemptsAllowed?: number;
+    questionResults?: Array<{
+      index: number;
+      question: string;
+      isCorrect: boolean;
+      marksEarned?: number;
+      maxMarks?: number;
+      correctAnswer?: unknown;
+      feedback?: string | null;
+    }>;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -179,11 +218,11 @@ export default function LearningClient({
   async function submitQuiz() {
     if (!quiz) return;
     setSubmitting(true);
-    const answers = quiz.questions.map((_, i) => quizAnswers[i] ?? -1);
+    const answers = quiz.questions.map((_, i) => quizAnswers[i] ?? null);
     const res = await fetch(`/api/quizzes/${quiz._id}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers, courseId }),
+      body: JSON.stringify({ answers, courseId, startedAt: quizStartedAt }),
     });
     setSubmitting(false);
     if (res.ok) {
@@ -281,7 +320,33 @@ export default function LearningClient({
 
   const allQuestionsAnswered =
     quiz !== null &&
-    Object.keys(quizAnswers).length >= quiz.questions.length;
+    quiz.questions.every((question, index) => {
+      const answer = quizAnswers[index];
+      const type = question.type;
+
+      if (type === "MCQ" || type === "MULTIPLE_CHOICE" || type === "TRUE_FALSE") {
+        return typeof answer === "number";
+      }
+
+      if (type === "SHORT_ANSWER" || type === "DESCRIPTIVE" || type === "ESSAY") {
+        return typeof answer === "string" && answer.trim().length > 0;
+      }
+
+      if (type === "MATCHING") {
+        if (!answer || typeof answer !== "object") return false;
+        const map = answer as Record<string, string>;
+        const pairs = question.matchingPairs || [];
+        return pairs.length > 0 && pairs.every((pair) => !!String(map[pair.left] || "").trim());
+      }
+
+      return false;
+    });
+
+  const questionsPerPage = Math.max(1, quiz?.questionsPerPage || 5);
+  const totalQuizPages = quiz ? Math.ceil(quiz.questions.length / questionsPerPage) : 1;
+  const pageStartIndex = (quizPage - 1) * questionsPerPage;
+  const pageEndIndex = pageStartIndex + questionsPerPage;
+  const pagedQuestions = quiz ? quiz.questions.slice(pageStartIndex, pageEndIndex) : [];
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
@@ -335,7 +400,11 @@ export default function LearningClient({
 
           {quiz && (
             <button
-              onClick={() => setShowQuiz(true)}
+              onClick={() => {
+                setShowQuiz(true);
+                setQuizPage(1);
+                setQuizStartedAt((prev) => prev || new Date().toISOString());
+              }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors mt-2 ${
                 showQuiz
                   ? "bg-purple-50 text-purple-700"
@@ -357,9 +426,22 @@ export default function LearningClient({
         {showQuiz && quiz ? (
           <div className="max-w-3xl mx-auto px-6 py-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{quiz.title}</h2>
+            {quiz.description && (
+              <p className="text-sm text-gray-600 mb-2">{quiz.description}</p>
+            )}
             <p className="text-gray-500 text-sm mb-6">
               Pass mark: {quiz.passMarkPercent}%
             </p>
+            <div className="mb-6 flex flex-wrap gap-3 text-xs text-gray-600">
+              {quiz.timeLimitMinutes && (
+                <span className="rounded-full bg-gray-100 px-3 py-1">
+                  Time limit: {quiz.timeLimitMinutes} min
+                </span>
+              )}
+              <span className="rounded-full bg-gray-100 px-3 py-1">
+                Attempts: {enrollment.quizAttempts || 0}/{quiz.attemptsAllowed || 1}
+              </span>
+            </div>
 
             {quizResult ? (
               <div
@@ -377,11 +459,43 @@ export default function LearningClient({
                   {quizResult.scorePercent}%). Pass mark:{" "}
                   {quizResult.passMarkPercent}%.
                 </p>
+                {typeof quizResult.attemptsUsed === "number" && (
+                  <p className="mt-1 text-xs text-gray-600">
+                    Attempts used: {quizResult.attemptsUsed}/{quizResult.attemptsAllowed || 1}
+                  </p>
+                )}
+                {Array.isArray(quizResult.questionResults) && quizResult.questionResults.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {quizResult.questionResults.map((result, idx) => (
+                      <div key={idx} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+                        <p className="font-medium text-gray-900">Q{result.index + 1}. {result.question}</p>
+                        <p className="text-xs text-gray-600">
+                          {result.isCorrect ? "Correct" : "Incorrect"}
+                          {typeof result.marksEarned === "number" && typeof result.maxMarks === "number"
+                            ? ` • Marks: ${result.marksEarned}/${result.maxMarks}`
+                            : ""}
+                        </p>
+                        {result.correctAnswer !== undefined && result.correctAnswer !== null && (
+                          <p className="mt-1 text-xs text-gray-700">
+                            Correct answer: {typeof result.correctAnswer === "string"
+                              ? result.correctAnswer
+                              : JSON.stringify(result.correctAnswer)}
+                          </p>
+                        )}
+                        {result.feedback && (
+                          <p className="mt-1 text-xs text-indigo-700">Feedback: {result.feedback}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {!quizResult.passed && (
                   <button
                     onClick={() => {
                       setQuizResult(null);
                       setQuizAnswers({});
+                      setQuizStartedAt(new Date().toISOString());
+                      setQuizPage(1);
                     }}
                     className="mt-3 text-blue-600 text-sm font-medium hover:underline"
                   >
@@ -391,37 +505,135 @@ export default function LearningClient({
               </div>
             ) : (
               <div className="space-y-6">
-                {quiz.questions.map((q, i) => (
+                {pagedQuestions.map((q, localIndex) => {
+                  const i = pageStartIndex + localIndex;
+                  const matchingPairs = q.matchingPairs || [];
+                  const matchingAnswer =
+                    quizAnswers[i] && typeof quizAnswers[i] === "object"
+                      ? (quizAnswers[i] as Record<string, string>)
+                      : {};
+
+                  return (
                   <div key={i} className="bg-white rounded-xl border border-gray-100 p-5">
                     <p className="font-medium text-gray-900 mb-4">
                       {i + 1}. {q.question}
                     </p>
-                    <div className="space-y-2">
-                      {q.options.map((opt, j) => (
-                        <label
-                          key={j}
-                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                            quizAnswers[i] === j
-                              ? "border-blue-500 bg-blue-50"
-                              : "border-gray-200 hover:bg-gray-50"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`q-${i}`}
-                            value={j}
-                            checked={quizAnswers[i] === j}
-                            onChange={() =>
-                              setQuizAnswers((prev) => ({ ...prev, [i]: j }))
-                            }
-                            className="text-blue-600"
-                          />
-                          <span className="text-sm text-gray-700">{opt}</span>
-                        </label>
-                      ))}
-                    </div>
+                    {(q.type === "MCQ" || q.type === "MULTIPLE_CHOICE" || q.type === "TRUE_FALSE") && (
+                      <div className="space-y-2">
+                        {(q.type === "TRUE_FALSE" ? ["True", "False"] : q.options || []).map((opt, j) => (
+                          <label
+                            key={j}
+                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                              quizAnswers[i] === j
+                                ? "border-blue-500 bg-blue-50"
+                                : "border-gray-200 hover:bg-gray-50"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`q-${i}`}
+                              value={j}
+                              checked={quizAnswers[i] === j}
+                              onChange={() =>
+                                setQuizAnswers((prev) => ({ ...prev, [i]: j }))
+                              }
+                              className="text-blue-600"
+                            />
+                            <span className="text-sm text-gray-700">{opt}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    {q.type === "SHORT_ANSWER" && (
+                      <input
+                        type="text"
+                        value={typeof quizAnswers[i] === "string" ? (quizAnswers[i] as string) : ""}
+                        onChange={(e) =>
+                          setQuizAnswers((prev) => ({ ...prev, [i]: e.target.value }))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        placeholder="Type your short answer"
+                      />
+                    )}
+
+                    {q.type === "MATCHING" && (
+                      <div className="space-y-2">
+                        {matchingPairs.map((pair, pairIdx) => (
+                          <div key={pairIdx} className="grid gap-2 sm:grid-cols-2">
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                              {pair.left}
+                            </div>
+                            <select
+                              value={matchingAnswer[pair.left] || ""}
+                              onChange={(e) =>
+                                setQuizAnswers((prev) => ({
+                                  ...prev,
+                                  [i]: {
+                                    ...(prev[i] && typeof prev[i] === "object"
+                                      ? (prev[i] as Record<string, string>)
+                                      : {}),
+                                    [pair.left]: e.target.value,
+                                  },
+                                }))
+                              }
+                              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            >
+                              <option value="">Select match</option>
+                              {matchingPairs.map((optionPair, optionIndex) => (
+                                <option key={optionIndex} value={optionPair.right}>
+                                  {optionPair.right}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {(q.type === "DESCRIPTIVE" || q.type === "ESSAY") && (
+                      <div>
+                        {q.selfMarkingGuidance && (
+                          <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            {q.selfMarkingGuidance}
+                          </p>
+                        )}
+                        <textarea
+                          rows={4}
+                          value={typeof quizAnswers[i] === "string" ? (quizAnswers[i] as string) : ""}
+                          onChange={(e) =>
+                            setQuizAnswers((prev) => ({ ...prev, [i]: e.target.value }))
+                          }
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          placeholder="Write your answer"
+                        />
+                      </div>
+                    )}
                   </div>
-                ))}
+                )})}
+
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setQuizPage((prev) => Math.max(1, prev - 1))}
+                    disabled={quizPage === 1}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-gray-500">
+                    Page {quizPage} of {totalQuizPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQuizPage((prev) => Math.min(totalQuizPages, prev + 1))}
+                    disabled={quizPage === totalQuizPages}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+
                 <button
                   onClick={submitQuiz}
                   disabled={submitting || !allQuestionsAnswered}

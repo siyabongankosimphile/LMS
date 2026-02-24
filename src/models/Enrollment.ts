@@ -10,6 +10,7 @@ export interface IEnrollment extends Document {
   completedAt?: Date;
   quizScore?: number;
   quizPassed?: boolean;
+  quizAttempts: number;
   enrolledAt: Date;
 }
 
@@ -23,6 +24,7 @@ const EnrollmentSchema = new Schema<IEnrollment>(
     completedAt: { type: Date },
     quizScore: { type: Number },
     quizPassed: { type: Boolean },
+    quizAttempts: { type: Number, default: 0 },
     enrolledAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
