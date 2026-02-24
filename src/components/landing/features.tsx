@@ -6,6 +6,7 @@ import {
   FaCode,
   FaDatabase,
 } from "react-icons/fa";
+import Link from "next/link";
 
 const tracks = [
   { icon: FaRobot, title: "AI & Machine Learning", description: "From Python to neural networks - build intelligent systems and become an AI specialist." },
@@ -32,9 +33,9 @@ export function Features() {
               </div>
               <h3 className="text-2xl font-semibold text-slate-900">{track.title}</h3>
               <p className="mt-4 text-slate-600">{track.description}</p>
-              <a href="/courses" className="mt-6 inline-block rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-700">
+              <Link href="/courses" className="mt-6 inline-block rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-700">
                 Learn More
-              </a>
+              </Link>
             </article>
           ))}
         </div>

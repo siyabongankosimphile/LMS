@@ -33,7 +33,7 @@ export async function POST(
       return NextResponse.json({ error: "Module not found" }, { status: 404 });
     }
 
-    const { title, order, videoUrl, content } = await req.json();
+    const { title, order, videoUrl, content, resources } = await req.json();
     if (!title) {
       return NextResponse.json({ error: "title is required" }, { status: 400 });
     }
@@ -45,7 +45,7 @@ export async function POST(
       order: order || 0,
       videoUrl,
       content,
-      resources: [],
+      resources: Array.isArray(resources) ? resources : [],
     });
 
     return NextResponse.json(lesson, { status: 201 });

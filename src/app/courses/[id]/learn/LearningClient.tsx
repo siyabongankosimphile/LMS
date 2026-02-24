@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface Lesson {
   _id: string;
@@ -41,6 +41,38 @@ interface Certificate {
   fileUrl: string;
 }
 
+interface AssignmentSubmission {
+  _id: string;
+  content?: string;
+  attachment?: {
+    url: string;
+    name: string;
+  };
+  status: "SUBMITTED" | "GRADED";
+  score?: number;
+  feedback?: string;
+}
+
+interface Assignment {
+  _id: string;
+  title: string;
+  description?: string;
+  dueAt?: string;
+  attachment?: {
+    url: string;
+    name: string;
+  };
+  mySubmission?: AssignmentSubmission | null;
+}
+
+interface DiscussionPost {
+  _id: string;
+  message: string;
+  authorRole: "ADMIN" | "FACILITATOR" | "STUDENT";
+  createdAt: string;
+  author?: { name?: string; surname?: string };
+}
+
 interface Props {
   courseId: string;
   course: { title: string };
@@ -75,8 +107,49 @@ export default function LearningClient({
     passMarkPercent: number;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, string>>(
+    {}
+  );
+  const [assignmentFiles, setAssignmentFiles] = useState<Record<string, File | null>>({});
+  const [assignmentFileNames, setAssignmentFileNames] = useState<Record<string, string>>(
+    {}
+  );
+  const [submittingAssignmentId, setSubmittingAssignmentId] = useState("");
+  const [discussionPosts, setDiscussionPosts] = useState<DiscussionPost[]>([]);
+  const [discussionMessage, setDiscussionMessage] = useState("");
+  const [postingDiscussion, setPostingDiscussion] = useState(false);
 
   const completedIds = new Set(enrollment.completedLessons || []);
+
+  const loadAssignments = useCallback(async () => {
+    const res = await fetch(`/api/courses/${courseId}/assignments`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const fetched = (data.assignments || []) as Assignment[];
+    setAssignments(fetched);
+    const nextDrafts: Record<string, string> = {};
+    const nextFileNames: Record<string, string> = {};
+    fetched.forEach((item) => {
+      nextDrafts[item._id] = item.mySubmission?.content || "";
+      nextFileNames[item._id] = item.mySubmission?.attachment?.name || "";
+    });
+    setAssignmentDrafts(nextDrafts);
+    setAssignmentFileNames(nextFileNames);
+    setAssignmentFiles({});
+  }, [courseId]);
+
+  const loadDiscussion = useCallback(async () => {
+    const res = await fetch(`/api/courses/${courseId}/discussion`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setDiscussionPosts(data.posts || []);
+  }, [courseId]);
+
+  useEffect(() => {
+    loadAssignments();
+    loadDiscussion();
+  }, [loadAssignments, loadDiscussion]);
 
   async function markComplete(lessonId: string) {
     const res = await fetch(`/api/enrollments/${courseId}/progress`, {
@@ -122,6 +195,78 @@ export default function LearningClient({
         quizPassed: data.passed,
         completed: data.completed,
       }));
+    }
+  }
+
+  async function submitAssignment(assignmentId: string) {
+    const content = (assignmentDrafts[assignmentId] || "").trim();
+    const file = assignmentFiles[assignmentId];
+    if (!content && !file) return;
+
+    setSubmittingAssignmentId(assignmentId);
+    try {
+      let attachment:
+        | {
+            url: string;
+            key: string;
+            name: string;
+            contentType?: string;
+            size?: number;
+          }
+        | undefined;
+
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("context", `assignment-submissions/${courseId}/${assignmentId}`);
+
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!uploadRes.ok) return;
+        const uploadData = await uploadRes.json();
+        attachment = {
+          url: uploadData.url,
+          key: uploadData.key,
+          name: uploadData.name,
+          contentType: file.type,
+          size: file.size,
+        };
+      }
+
+      const res = await fetch(`/api/assignments/${assignmentId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, attachment }),
+      });
+      if (res.ok) {
+        await loadAssignments();
+      }
+    } finally {
+      setSubmittingAssignmentId("");
+    }
+  }
+
+  async function postDiscussion() {
+    const message = discussionMessage.trim();
+    if (!message) return;
+
+    setPostingDiscussion(true);
+    try {
+      const res = await fetch(`/api/courses/${courseId}/discussion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+
+      if (res.ok) {
+        setDiscussionMessage("");
+        await loadDiscussion();
+      }
+    } finally {
+      setPostingDiscussion(false);
     }
   }
 
@@ -346,6 +491,148 @@ export default function LearningClient({
                 </div>
               </div>
             )}
+
+            <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+              <h3 className="mb-3 font-semibold text-gray-900">Assignments</h3>
+              {assignments.length === 0 ? (
+                <p className="text-sm text-gray-500">No assignments available for this course yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {assignments.map((assignment) => (
+                    <div key={assignment._id} className="rounded-lg border border-gray-200 p-3">
+                      <p className="font-medium text-gray-900">{assignment.title}</p>
+                      {assignment.description && (
+                        <p className="mt-1 text-sm text-gray-600">{assignment.description}</p>
+                      )}
+                      {assignment.dueAt && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Due: {new Date(assignment.dueAt).toLocaleDateString()}
+                        </p>
+                      )}
+                      {assignment.attachment?.url && (
+                        <a
+                          href={assignment.attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-block text-xs text-blue-600 hover:underline"
+                        >
+                          Assignment file: {assignment.attachment.name}
+                        </a>
+                      )}
+
+                      <textarea
+                        rows={3}
+                        value={assignmentDrafts[assignment._id] || ""}
+                        onChange={(e) =>
+                          setAssignmentDrafts((prev) => ({
+                            ...prev,
+                            [assignment._id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Write your submission"
+                        className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      />
+
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp,.zip"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setAssignmentFiles((prev) => ({
+                            ...prev,
+                            [assignment._id]: file,
+                          }));
+                          setAssignmentFileNames((prev) => ({
+                            ...prev,
+                            [assignment._id]: file?.name || assignment.mySubmission?.attachment?.name || "",
+                          }));
+                        }}
+                        className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Optional. Upload file and/or text. Allowed: PDF, DOC, DOCX, TXT, PNG, JPG, WEBP, ZIP. Max 50MB.
+                      </p>
+                      {assignmentFileNames[assignment._id] && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Selected file: {assignmentFileNames[assignment._id]}
+                        </p>
+                      )}
+
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => submitAssignment(assignment._id)}
+                          disabled={submittingAssignmentId === assignment._id}
+                          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {submittingAssignmentId === assignment._id
+                            ? "Submitting..."
+                            : "Submit Assignment"}
+                        </button>
+                        {assignment.mySubmission && (
+                          <span className="text-xs text-gray-600">
+                            Status: {assignment.mySubmission.status}
+                            {typeof assignment.mySubmission.score === "number"
+                              ? ` • Score: ${assignment.mySubmission.score}%`
+                              : ""}
+                          </span>
+                        )}
+                      </div>
+
+                      {assignment.mySubmission?.feedback && (
+                        <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                          Feedback: {assignment.mySubmission.feedback}
+                        </p>
+                      )}
+                      {assignment.mySubmission?.attachment?.url && (
+                        <a
+                          href={assignment.mySubmission.attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-block text-xs text-blue-600 hover:underline"
+                        >
+                          Your uploaded file: {assignment.mySubmission.attachment.name}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+              <h3 className="mb-3 font-semibold text-gray-900">Discussion</h3>
+              <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-3">
+                {discussionPosts.length === 0 ? (
+                  <p className="text-sm text-gray-500">No discussion posts yet.</p>
+                ) : (
+                  discussionPosts.map((post) => (
+                    <div key={post._id} className="rounded-lg bg-white p-2">
+                      <p className="text-xs font-semibold text-gray-700">
+                        {(post.author?.name || "User") + " " + (post.author?.surname || "")} • {post.authorRole}
+                      </p>
+                      <p className="text-sm text-gray-700">{post.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <input
+                  value={discussionMessage}
+                  onChange={(e) => setDiscussionMessage(e.target.value)}
+                  placeholder="Write a message"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={postDiscussion}
+                  disabled={postingDiscussion}
+                  className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {postingDiscussion ? "Posting..." : "Post"}
+                </button>
+              </div>
+            </div>
 
             {!completedIds.has(activeLesson._id) ? (
               <button

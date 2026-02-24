@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     if (
       !session?.user?.id ||
-      session.user.role !== "FACILITATOR" ||
-      session.user.status !== "ACTIVE"
+      !["FACILITATOR", "ADMIN"].includes(session.user.role) ||
+      (session.user.role === "FACILITATOR" && session.user.status !== "ACTIVE")
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

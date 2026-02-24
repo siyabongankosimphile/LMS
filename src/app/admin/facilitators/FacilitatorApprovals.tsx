@@ -5,6 +5,7 @@ import { useState } from "react";
 interface Facilitator {
   _id: string;
   name: string;
+  surname?: string;
   email: string;
   status: string;
   createdAt: string;
@@ -64,7 +65,7 @@ export default function FacilitatorApprovals({
             <tbody className="divide-y divide-gray-50 dark:divide-slate-700">
               {facilitators.map((f) => (
                 <tr key={f._id} className="hover:bg-gray-50 dark:hover:bg-slate-700/40">
-                  <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{f.name}</td>
+                  <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{f.name} {f.surname || ""}</td>
                   <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{f.email}</td>
                   <td className="px-6 py-4">
                     <span

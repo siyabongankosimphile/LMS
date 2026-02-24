@@ -12,16 +12,18 @@ import CourseActions from "./CourseActions";
 
 export default async function FacilitatorDashboardPage() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id || session.user.role !== "FACILITATOR") {
+  if (!session?.user?.id || !["FACILITATOR", "ADMIN"].includes(session.user.role)) {
     redirect("/dashboard");
   }
-  if (session.user.status !== "ACTIVE") {
+  if (session.user.role === "FACILITATOR" && session.user.status !== "ACTIVE") {
     redirect("/dashboard?error=pending_approval");
   }
 
   await connectDB();
 
-  const courses = await Course.find({ facilitator: session.user.id })
+  const courses = await Course.find(
+    session.user.role === "ADMIN" ? {} : { facilitator: session.user.id }
+  )
     .sort({ createdAt: -1 })
     .lean();
 

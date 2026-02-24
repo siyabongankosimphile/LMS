@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
-import { FaBars, FaBrain, FaTimes } from "react-icons/fa";
+import { FaBars, FaTimes } from "react-icons/fa";
 
 export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -13,7 +14,13 @@ export function Navbar() {
     <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-950 to-slate-800 text-white shadow-md">
       <nav className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2 text-2xl font-bold tracking-wide">
-          <FaBrain className="text-cyan-300" />
+          <Image
+            src="/download.png"
+            alt="Kayise IT logo"
+            width={34}
+            height={34}
+            className="h-8 w-8 rounded-sm object-cover"
+          />
           <span>
             Kayise<span className="text-cyan-300 font-light">IT</span>
           </span>

@@ -1,9 +1,11 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IQuizQuestion {
+  type: "MCQ" | "DESCRIPTIVE";
   question: string;
-  options: string[];
-  correctIndex: number;
+  options?: string[];
+  correctIndex?: number;
+  selfMarkingGuidance?: string;
 }
 
 export interface IQuiz extends Document {
@@ -22,9 +24,16 @@ const QuizSchema = new Schema<IQuiz>(
     title: { type: String, required: true },
     questions: [
       {
+        type: {
+          type: String,
+          enum: ["MCQ", "DESCRIPTIVE"],
+          default: "MCQ",
+          required: true,
+        },
         question: { type: String, required: true },
         options: [{ type: String }],
-        correctIndex: { type: Number, required: true },
+        correctIndex: { type: Number },
+        selfMarkingGuidance: { type: String },
       },
     ],
     passMarkPercent: { type: Number, default: 70 },

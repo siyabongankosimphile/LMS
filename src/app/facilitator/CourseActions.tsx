@@ -51,6 +51,18 @@ export default function CourseActions({
       >
         Manage →
       </Link>
+      <Link
+        href={`/facilitator/courses/${courseId}/assignments`}
+        className="text-indigo-600 font-medium hover:underline text-xs"
+      >
+        Assignments
+      </Link>
+      <Link
+        href={`/facilitator/courses/${courseId}/reports`}
+        className="text-emerald-600 font-medium hover:underline text-xs"
+      >
+        Reports
+      </Link>
       <button
         type="button"
         onClick={handleDelete}

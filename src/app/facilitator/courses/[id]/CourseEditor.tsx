@@ -9,6 +9,12 @@ interface Lesson {
   videoUrl?: string;
   content?: string;
   module: string;
+  resources?: Array<{
+    name: string;
+    type: "file" | "link";
+    url: string;
+    key?: string;
+  }>;
 }
 
 interface Module {
@@ -17,9 +23,11 @@ interface Module {
 }
 
 interface QuizQuestion {
+  type: "MCQ" | "DESCRIPTIVE";
   question: string;
-  options: string[];
-  correctIndex: number;
+  options?: string[];
+  correctIndex?: number;
+  selfMarkingGuidance?: string;
 }
 
 interface Quiz {
@@ -77,8 +85,17 @@ export default function CourseEditor({
   const [newLessonTitle, setNewLessonTitle] = useState("");
   const [newLessonVideo, setNewLessonVideo] = useState("");
   const [newLessonContent, setNewLessonContent] = useState("");
+  const [newLessonSlideFile, setNewLessonSlideFile] = useState<File | null>(null);
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [addingLesson, setAddingLesson] = useState(false);
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+  const [editLessonTitle, setEditLessonTitle] = useState("");
+  const [editLessonVideo, setEditLessonVideo] = useState("");
+  const [editLessonContent, setEditLessonContent] = useState("");
+  const [editLessonResources, setEditLessonResources] = useState<
+    Array<{ name: string; type: "file" | "link"; url: string; key?: string }>
+  >([]);
+  const [editingLesson, setEditingLesson] = useState(false);
 
   // Quiz state
   const [quizTitle, setQuizTitle] = useState(quiz?.title || "");
@@ -136,6 +153,19 @@ export default function CourseEditor({
   async function addLesson() {
     if (!newLessonTitle.trim() || !selectedModule) return;
     setAddingLesson(true);
+    let slideResource:
+      | { name: string; type: "file" | "link"; url: string; key?: string }
+      | undefined;
+
+    if (newLessonSlideFile) {
+      const uploaded = await uploadSlide(newLessonSlideFile);
+      if (!uploaded) {
+        setAddingLesson(false);
+        return;
+      }
+      slideResource = uploaded;
+    }
+
     const res = await fetch(
       `/api/facilitator/courses/${courseId}/modules/${selectedModule}/lessons`,
       {
@@ -145,6 +175,7 @@ export default function CourseEditor({
           title: newLessonTitle,
           videoUrl: newLessonVideo || undefined,
           content: newLessonContent || undefined,
+          resources: slideResource ? [slideResource] : [],
           order: lessons.filter((l) => l.module === selectedModule).length,
         }),
       }
@@ -156,20 +187,89 @@ export default function CourseEditor({
       setNewLessonTitle("");
       setNewLessonVideo("");
       setNewLessonContent("");
+      setNewLessonSlideFile(null);
+    }
+  }
+
+  async function uploadSlide(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("context", "slides");
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      name: data.name,
+      type: "file" as const,
+      url: data.url,
+      key: data.key,
+    };
+  }
+
+  function startEditLesson(lesson: Lesson) {
+    setEditingLessonId(lesson._id);
+    setEditLessonTitle(lesson.title);
+    setEditLessonVideo(lesson.videoUrl || "");
+    setEditLessonContent(lesson.content || "");
+    setEditLessonResources(lesson.resources || []);
+  }
+
+  function cancelEditLesson() {
+    setEditingLessonId(null);
+    setEditLessonTitle("");
+    setEditLessonVideo("");
+    setEditLessonContent("");
+    setEditLessonResources([]);
+  }
+
+  async function addSlideToEditingLesson(file: File) {
+    const uploaded = await uploadSlide(file);
+    if (!uploaded) return;
+    setEditLessonResources((prev) => [...prev, uploaded]);
+  }
+
+  async function saveEditedLesson(moduleId: string, lessonId: string) {
+    setEditingLesson(true);
+    const res = await fetch(
+      `/api/facilitator/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editLessonTitle,
+          videoUrl: editLessonVideo || null,
+          content: editLessonContent || null,
+          resources: editLessonResources,
+        }),
+      }
+    );
+    setEditingLesson(false);
+
+    if (res.ok) {
+      const updated = await res.json();
+      setLessons((prev) =>
+        prev.map((lesson) => (lesson._id === lessonId ? updated : lesson))
+      );
+      cancelEditLesson();
     }
   }
 
   function addQuestion() {
     setQuestions((prev) => [
       ...prev,
-      { question: "", options: ["", "", "", ""], correctIndex: 0 },
+      { type: "MCQ", question: "", options: ["", "", "", ""], correctIndex: 0 },
     ]);
   }
 
   function updateQuestion(
     i: number,
     field: keyof QuizQuestion,
-    value: string | number | string[]
+    value: string | number | string[] | undefined
   ) {
     setQuestions((prev) => {
       const updated = [...prev];
@@ -181,6 +281,24 @@ export default function CourseEditor({
   async function saveQuiz() {
     setSavingQuiz(true);
     setQuizMsg("");
+
+    const normalizedQuestions = questions.map((question) => {
+      if (question.type === "DESCRIPTIVE") {
+        return {
+          type: "DESCRIPTIVE",
+          question: question.question,
+          selfMarkingGuidance: question.selfMarkingGuidance || "",
+        };
+      }
+
+      return {
+        type: "MCQ",
+        question: question.question,
+        options: question.options || ["", "", "", ""],
+        correctIndex: question.correctIndex ?? 0,
+      };
+    });
+
     const res = await fetch(
       `/api/facilitator/courses/${courseId}/quizzes`,
       {
@@ -188,7 +306,7 @@ export default function CourseEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: quizTitle,
-          questions,
+          questions: normalizedQuestions,
           passMarkPercent: quizPassMark,
         }),
       }
@@ -370,11 +488,120 @@ export default function CourseEditor({
                       key={l._id}
                       className="px-5 py-3 text-sm text-gray-700"
                     >
-                      <div className="font-medium">{l.title}</div>
-                      {l.videoUrl && (
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          🎬 Video: {l.videoUrl}
+                      {editingLessonId === l._id ? (
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            value={editLessonTitle}
+                            onChange={(e) => setEditLessonTitle(e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Lesson title"
+                          />
+                          <input
+                            type="url"
+                            value={editLessonVideo}
+                            onChange={(e) => setEditLessonVideo(e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Video URL (optional)"
+                          />
+                          <textarea
+                            value={editLessonContent}
+                            onChange={(e) => setEditLessonContent(e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                            placeholder="Lesson content / notes"
+                            rows={3}
+                          />
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">
+                              Upload slide (PPT/PDF)
+                            </label>
+                            <input
+                              type="file"
+                              accept=".ppt,.pptx,.pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  addSlideToEditingLesson(file);
+                                  e.currentTarget.value = "";
+                                }
+                              }}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                            />
+                          </div>
+                          {editLessonResources.length > 0 && (
+                            <div className="space-y-1">
+                              {editLessonResources.map((resource, resourceIndex) => (
+                                <div
+                                  key={`${resource.url}-${resourceIndex}`}
+                                  className="flex items-center justify-between text-xs text-gray-600"
+                                >
+                                  <a
+                                    href={resource.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline truncate"
+                                  >
+                                    {resource.name}
+                                  </a>
+                                  <button
+                                    onClick={() =>
+                                      setEditLessonResources((prev) =>
+                                        prev.filter((_, idx) => idx !== resourceIndex)
+                                      )
+                                    }
+                                    className="text-red-500 hover:underline"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => saveEditedLesson(m._id, l._id)}
+                              disabled={editingLesson || !editLessonTitle.trim()}
+                              className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {editingLesson ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              onClick={cancelEditLesson}
+                              className="text-xs text-gray-500 hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-medium">{l.title}</div>
+                              {l.videoUrl && (
+                                <div className="text-xs text-gray-400 mt-0.5">
+                                  🎬 Video: {l.videoUrl}
+                                </div>
+                              )}
+                              {l.content && (
+                                <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                  {l.content}
+                                </div>
+                              )}
+                              {(l.resources || []).length > 0 && (
+                                <div className="text-xs text-blue-600 mt-1">
+                                  📎 {(l.resources || []).length} resource(s)
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => startEditLesson(l)}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   ))}
@@ -407,6 +634,17 @@ export default function CourseEditor({
                     placeholder="Lesson content / notes (optional)"
                     rows={3}
                   />
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Upload slide (PPT/PDF) (optional)
+                    </label>
+                    <input
+                      type="file"
+                      accept=".ppt,.pptx,.pdf"
+                      onChange={(e) => setNewLessonSlideFile(e.target.files?.[0] || null)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
                   <button
                     onClick={addLesson}
                     disabled={addingLesson || !newLessonTitle.trim()}
@@ -483,30 +721,76 @@ export default function CourseEditor({
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Question text"
                 />
-                <div className="space-y-2">
-                  {q.options.map((opt, j) => (
-                    <div key={j} className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name={`correct-${i}`}
-                        checked={q.correctIndex === j}
-                        onChange={() => updateQuestion(i, "correctIndex", j)}
-                        className="text-blue-600"
-                      />
-                      <input
-                        type="text"
-                        value={opt}
-                        onChange={(e) => {
-                          const newOptions = [...q.options];
-                          newOptions[j] = e.target.value;
-                          updateQuestion(i, "options", newOptions);
-                        }}
-                        className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={`Option ${j + 1}${q.correctIndex === j ? " (correct)" : ""}`}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <select
+                  value={q.type}
+                  onChange={(e) => {
+                    const nextType = e.target.value as "MCQ" | "DESCRIPTIVE";
+                    if (nextType === "DESCRIPTIVE") {
+                      setQuestions((prev) => {
+                        const updated = [...prev];
+                        updated[i] = {
+                          ...updated[i],
+                          type: "DESCRIPTIVE",
+                          options: [],
+                          correctIndex: undefined,
+                        };
+                        return updated;
+                      });
+                      return;
+                    }
+
+                    setQuestions((prev) => {
+                      const updated = [...prev];
+                      updated[i] = {
+                        ...updated[i],
+                        type: "MCQ",
+                        options: ["", "", "", ""],
+                        correctIndex: 0,
+                      };
+                      return updated;
+                    });
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="MCQ">Multiple Choice</option>
+                  <option value="DESCRIPTIVE">Descriptive (self marking)</option>
+                </select>
+                {q.type === "MCQ" ? (
+                  <div className="space-y-2">
+                    {(q.options || ["", "", "", ""]).map((opt, j) => (
+                      <div key={j} className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`correct-${i}`}
+                          checked={(q.correctIndex ?? 0) === j}
+                          onChange={() => updateQuestion(i, "correctIndex", j)}
+                          className="text-blue-600"
+                        />
+                        <input
+                          type="text"
+                          value={opt}
+                          onChange={(e) => {
+                            const newOptions = [...(q.options || ["", "", "", ""])];
+                            newOptions[j] = e.target.value;
+                            updateQuestion(i, "options", newOptions);
+                          }}
+                          className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder={`Option ${j + 1}${(q.correctIndex ?? 0) === j ? " (correct)" : ""}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    value={q.selfMarkingGuidance || ""}
+                    onChange={(e) =>
+                      updateQuestion(i, "selfMarkingGuidance", e.target.value)
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    rows={3}
+                    placeholder="Marking guide for students to self-score descriptive answers"
+                  />
+                )}
               </div>
             ))}
           </div>

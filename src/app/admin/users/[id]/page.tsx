@@ -49,6 +49,9 @@ export default async function AdminUserDetailsPage({ params }: Props) {
           <DashboardMenu
             items={[
               { label: "Admin Dashboard", href: "/admin" },
+              { label: "Operations", href: "/admin/operations" },
+              { label: "Certificates", href: "/admin/certificates" },
+              { label: "Activity", href: "/admin/activity" },
               { label: "Users", href: "/admin/users" },
               { label: "Facilitators", href: "/admin/facilitators" },
             ]}

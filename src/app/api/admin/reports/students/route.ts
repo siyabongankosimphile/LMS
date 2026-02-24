@@ -23,7 +23,9 @@ export async function GET(_req: NextRequest) {
     await connectDB();
 
     const students = await User.find({ role: "STUDENT" })
-      .select("name email status createdAt")
+      .select(
+        "name surname email status cityTown country gender race employmentStatus highestQualification province age phone saId createdAt"
+      )
       .sort({ createdAt: -1 })
       .lean();
 
@@ -56,7 +58,18 @@ export async function GET(_req: NextRequest) {
 
     const header = [
       "Student Name",
+      "Surname",
       "Email",
+      "City/Town",
+      "Country",
+      "Gender",
+      "Race",
+      "Employment Status",
+      "Highest Qualification",
+      "Province",
+      "Age",
+      "Phone",
+      "SA ID",
       "Account Status",
       "Enrolled Courses",
       "Completed Courses",
@@ -79,7 +92,18 @@ export async function GET(_req: NextRequest) {
 
       return [
         student.name,
+        student.surname || "",
         student.email,
+        student.cityTown || "",
+        student.country || "",
+        student.gender || "",
+        student.race || "",
+        student.employmentStatus || "",
+        student.highestQualification || "",
+        student.province || "",
+        student.age || "",
+        student.phone || "",
+        student.saId || "",
         student.status,
         summary.enrolledCourses,
         summary.completedCourses,

@@ -22,7 +22,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { answers, courseId } = await req.json();
+    const { answers, courseId, selfMarks } = await req.json();
     if (!answers || !courseId) {
       return NextResponse.json(
         { error: "answers and courseId are required" },
@@ -51,6 +51,13 @@ export async function POST(
     // Score the quiz
     let correct = 0;
     quiz.questions.forEach((q, i) => {
+      if (q.type === "DESCRIPTIVE") {
+        if (Array.isArray(selfMarks) && selfMarks[i] === true) {
+          correct++;
+        }
+        return;
+      }
+
       if (answers[i] !== undefined && answers[i] === q.correctIndex) {
         correct++;
       }

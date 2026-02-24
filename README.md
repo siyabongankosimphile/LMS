@@ -33,6 +33,50 @@ A full-featured LMS built with **Next.js 14 App Router**, **NextAuth v4**, **Mon
 - Facilitator approval/rejection UI
 - Full user list with roles and statuses
 
+## Rights and Responsibilities
+
+### Learner (Student)
+
+#### Rights (What learners can do)
+- Access assigned courses and learning materials
+- View lessons, videos, and documents
+- Participate in discussions and forums
+- Submit assignments and assessments
+- Take quizzes and exams
+- View grades and feedback
+- Track learning progress
+- Download allowed learning resources
+- Receive certificates after course completion
+
+#### Responsibilities
+- Complete assigned courses on time
+- Participate in learning activities
+- Submit original work (no plagiarism)
+- Follow LMS and institution rules
+- Communicate respectfully
+- Protect account credentials and use the platform responsibly
+
+### Facilitator (Instructor)
+
+#### Rights (What facilitators can do)
+- Create and manage courses
+- Upload learning materials (videos, PDFs, slides)
+- Create assignments, quizzes, and exams
+- Grade learner submissions
+- Provide feedback
+- Monitor learner progress
+- Manage discussions and forums
+- Communicate with learners
+- Generate course reports
+
+#### Responsibilities
+- Provide quality learning materials
+- Support and guide learners
+- Assess learners fairly
+- Provide timely feedback
+- Monitor learner performance
+- Maintain course structure
+
 ## Tech Stack
 
 | Layer | Technology |

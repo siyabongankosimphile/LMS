@@ -57,6 +57,15 @@ export default async function AdminPage() {
           <DashboardMenu
             items={[
               { label: "Admin Dashboard", href: "/admin" },
+              { label: "Operations", href: "/admin/operations" },
+              { label: "Certificates", href: "/admin/certificates" },
+              { label: "Activity", href: "/admin/activity" },
+              { label: "Grade", href: "/admin/tools/grade" },
+              { label: "Message", href: "/admin/tools/message" },
+              { label: "Private File", href: "/admin/tools/private-file" },
+              { label: "Preference", href: "/admin/tools/preference" },
+              { label: "Filter", href: "/admin/tools/filter" },
+              { label: "Calendar", href: "/admin/tools/calendar" },
               { label: "Users", href: "/admin/users" },
               { label: "Facilitators", href: "/admin/facilitators" },
             ]}

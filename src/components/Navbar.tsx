@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 
@@ -14,8 +15,15 @@ export default function Navbar() {
     <nav className="bg-blue-700 text-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link href="/" className="text-xl font-bold tracking-tight">
-            Kayise IT LMS
+          <Link href="/" className="flex items-center gap-2 text-xl font-bold tracking-tight">
+            <Image
+              src="/download.png"
+              alt="Kayise IT LMS logo"
+              width={28}
+              height={28}
+              className="h-7 w-7 rounded-sm object-cover"
+            />
+            <span>Kayise IT LMS</span>
           </Link>
 
           {/* Desktop links */}
@@ -28,7 +36,7 @@ export default function Navbar() {
                 <Link href="/courses" className="hover:text-blue-200 transition-colors">
                   Courses
                 </Link>
-                {role === "FACILITATOR" && (
+                {(role === "FACILITATOR" || role === "ADMIN") && (
                   <Link href="/facilitator" className="hover:text-blue-200 transition-colors">
                     My Courses
                   </Link>
@@ -105,7 +113,7 @@ export default function Navbar() {
             <>
               <Link href="/dashboard" className="block hover:text-blue-200">Dashboard</Link>
               <Link href="/courses" className="block hover:text-blue-200">Courses</Link>
-              {role === "FACILITATOR" && (
+              {(role === "FACILITATOR" || role === "ADMIN") && (
                 <Link href="/facilitator" className="block hover:text-blue-200">My Courses</Link>
               )}
               {role === "ADMIN" && (
