@@ -21,6 +21,14 @@ type BrowserSpeechRecognition = {
 
 type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
 
+const INITIAL_MESSAGES: ChatMessage[] = [
+  {
+    id: 1,
+    role: "assistant",
+    text: "Hi! Ask me anything about Kayese LMS.",
+  },
+];
+
 function getLmsReply(question: string) {
   const text = question.toLowerCase();
 
@@ -52,13 +60,7 @@ export function ChatBoard() {
   const [input, setInput] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 1,
-      role: "assistant",
-      text: "Hi! Ask me anything about Kayese LMS.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
 
   const welcomeSpoken = useRef(false);
 
@@ -82,30 +84,51 @@ export function ChatBoard() {
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-ZA";
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice =
+      voices.find((voice) => voice.lang.toLowerCase().startsWith("en-za")) ||
+      voices.find((voice) => voice.lang.toLowerCase().startsWith("en-gb")) ||
+      voices.find((voice) => voice.lang.toLowerCase().startsWith("en"));
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
     utterance.rate = 1;
     utterance.pitch = 1;
     window.speechSynthesis.speak(utterance);
   };
 
+  const resetConversation = () => {
+    setMessages(INITIAL_MESSAGES);
+    setInput("");
+    setIsListening(false);
+    welcomeSpoken.current = false;
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   const handleOpenToggle = () => {
-    setOpen((prev) => {
-      const next = !prev;
+    if (open) {
+      setOpen(false);
+      resetConversation();
+      return;
+    }
 
-      if (next) {
-        const welcomeText = "Welcome to Kayese LMS";
-        speak(welcomeText);
+    setOpen(true);
+    const welcomeText = "Welcome to Kayese LMS";
+    speak(welcomeText);
 
-        if (!welcomeSpoken.current) {
-          setMessages((old) => [
-            ...old,
-            { id: Date.now(), role: "assistant", text: `${welcomeText}. How can I help you today?` },
-          ]);
-          welcomeSpoken.current = true;
-        }
-      }
-
-      return next;
-    });
+    if (!welcomeSpoken.current) {
+      setMessages((old) => [
+        ...old,
+        { id: Date.now(), role: "assistant", text: `${welcomeText}. How can I help you today?` },
+      ]);
+      welcomeSpoken.current = true;
+    }
   };
 
   const sendMessage = async (value: string) => {
@@ -179,7 +202,7 @@ export function ChatBoard() {
 
     setIsListening(true);
     const recognition = new speechRecognition();
-    recognition.lang = "en-US";
+    recognition.lang = "en-ZA";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 

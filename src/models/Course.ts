@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import "@/models/User";
 
 export interface ICourse extends Document {
   _id: mongoose.Types.ObjectId;
