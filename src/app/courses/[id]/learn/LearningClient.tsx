@@ -146,6 +146,7 @@ export default function LearningClient({
     }>;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [quizSubmitMsg, setQuizSubmitMsg] = useState("");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, string>>(
     {}
@@ -217,12 +218,18 @@ export default function LearningClient({
 
   async function submitQuiz() {
     if (!quiz) return;
+
+    setQuizSubmitMsg("");
     setSubmitting(true);
+    const startedAt = quizStartedAt || new Date().toISOString();
+    if (!quizStartedAt) {
+      setQuizStartedAt(startedAt);
+    }
     const answers = quiz.questions.map((_, i) => quizAnswers[i] ?? null);
     const res = await fetch(`/api/quizzes/${quiz._id}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers, courseId, startedAt: quizStartedAt }),
+      body: JSON.stringify({ answers, courseId, startedAt }),
     });
     setSubmitting(false);
     if (res.ok) {
@@ -233,8 +240,21 @@ export default function LearningClient({
         quizScore: data.scorePercent,
         quizPassed: data.passed,
         completed: data.completed,
+        quizAttempts: data.attemptsUsed ?? prev.quizAttempts,
       }));
+      return;
     }
+
+    let errorMessage = "Failed to submit quiz.";
+    try {
+      const errorData = await res.json();
+      if (typeof errorData?.error === "string" && errorData.error.trim()) {
+        errorMessage = errorData.error;
+      }
+    } catch {
+      // no-op
+    }
+    setQuizSubmitMsg(errorMessage);
   }
 
   async function submitAssignment(assignmentId: string) {
@@ -403,7 +423,8 @@ export default function LearningClient({
               onClick={() => {
                 setShowQuiz(true);
                 setQuizPage(1);
-                setQuizStartedAt((prev) => prev || new Date().toISOString());
+                setQuizStartedAt(new Date().toISOString());
+                setQuizSubmitMsg("");
               }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors mt-2 ${
                 showQuiz
@@ -641,6 +662,9 @@ export default function LearningClient({
                 >
                   {submitting ? "Submitting..." : "Submit Quiz"}
                 </button>
+                {quizSubmitMsg && (
+                  <p className="text-sm text-red-600">{quizSubmitMsg}</p>
+                )}
               </div>
             )}
 

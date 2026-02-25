@@ -76,190 +76,35 @@ interface Props {
   quiz: Quiz | null;
 }
 
-          <h3 className="font-semibold text-gray-900">Course Quiz</h3>
-
-          <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-            <h4 className="text-sm font-semibold text-gray-800">Basic Settings</h4>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Name
-              </label>
-              <input
-                type="text"
-                value={quizTitle}
-                onChange={(e) => setQuizTitle(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Example: Module 1 Quiz"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                value={quizDescription}
-                onChange={(e) => setQuizDescription(e.target.value)}
-                rows={3}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                placeholder="Instructions for students"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-            <h4 className="text-sm font-semibold text-gray-800">Timing Settings</h4>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Open quiz
-                </label>
-                <input
-                  type="datetime-local"
-                  value={quizOpenAt}
-                  onChange={(e) => setQuizOpenAt(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Close quiz
-                </label>
-                <input
-                  type="datetime-local"
-                  value={quizCloseAt}
-                  onChange={(e) => setQuizCloseAt(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Time limit (minutes)
-              </label>
-              <input
-                type="number"
-                value={quizTimeLimitMinutes}
-                onChange={(e) => setQuizTimeLimitMinutes(Number(e.target.value))}
-                min={1}
-                className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-            <h4 className="text-sm font-semibold text-gray-800">Grade Settings</h4>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Grade category
-                </label>
-                <input
-                  type="text"
-                  value={quizGradeCategory}
-                  onChange={(e) => setQuizGradeCategory(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Attempts allowed
-                </label>
-                <input
-                  type="number"
-                  value={quizAttemptsAllowed}
-                  onChange={(e) => setQuizAttemptsAllowed(Number(e.target.value))}
-                  min={1}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Passing grade (%)
-                </label>
-                <input
-                  type="number"
-                  value={quizPassMark}
-                  onChange={(e) => setQuizPassMark(Number(e.target.value))}
-                  min={0}
-                  max={100}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-            <h4 className="text-sm font-semibold text-gray-800">Layout</h4>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Questions per page
-              </label>
-              <input
-                type="number"
-                value={quizQuestionsPerPage}
-                onChange={(e) => setQuizQuestionsPerPage(Number(e.target.value))}
-                min={1}
-                className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-            <h4 className="text-sm font-semibold text-gray-800">Review Options</h4>
-            <div className="flex flex-wrap gap-5">
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={quizReviewOptions.showMarks}
-                  onChange={(e) =>
-                    setQuizReviewOptions((prev) => ({
-                      ...prev,
-                      showMarks: e.target.checked,
-                    }))
-                  }
-                />
-                Marks
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={quizReviewOptions.showCorrectAnswers}
-                  onChange={(e) =>
-                    setQuizReviewOptions((prev) => ({
-                      ...prev,
-                      showCorrectAnswers: e.target.checked,
-                    }))
-                  }
-                />
-                Correct answers
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={quizReviewOptions.showFeedback}
-                  onChange={(e) =>
-                    setQuizReviewOptions((prev) => ({
-                      ...prev,
-                      showFeedback: e.target.checked,
-                    }))
-                  }
-                />
-                Feedback
-              </label>
-            </div>
-          </div>
-
-          <div className="space-y-4 rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-gray-800">Edit Quiz Questions</h4>
-              <button
-                onClick={addQuestion}
-                className="border border-blue-300 text-blue-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50"
-              >
-                Add → New question
-              </button>
-            </div>
+export default function CourseEditor({
   courseId,
+  course: initialCourse,
+  modules: initialModules,
+  lessons: initialLessons,
+  quiz: initialQuiz,
+}: Props) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"overview" | "content" | "quiz">(
+    "overview"
+  );
+  const [course, setCourse] = useState(initialCourse);
+  const [modules, setModules] = useState(initialModules);
+  const [lessons, setLessons] = useState(initialLessons);
+  const [quiz, setQuiz] = useState(initialQuiz);
+
+  // Overview form state
+  const [title, setTitle] = useState(course.title);
+  const [description, setDescription] = useState(course.description);
+  const [passMarkPercent, setPassMarkPercent] = useState(course.passMarkPercent);
+  const [published, setPublished] = useState(course.published);
+  const [enrollmentKey, setEnrollmentKey] = useState("");
+  const [saveMsg, setSaveMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Module/Lesson state
+  const [newModuleTitle, setNewModuleTitle] = useState("");
+  const [addingModule, setAddingModule] = useState(false);
+  const [newLessonTitle, setNewLessonTitle] = useState("");
   const [newLessonVideo, setNewLessonVideo] = useState("");
   const [newLessonContent, setNewLessonContent] = useState("");
   const [newLessonSlideFile, setNewLessonSlideFile] = useState<File | null>(null);
@@ -304,12 +149,12 @@ interface Props {
   const [questions, setQuestions] = useState<QuizQuestion[]>(
     (quiz?.questions || []).map((question) => ({
       ...question,
-      type:
-        question.type === "MCQ"
-          ? "MULTIPLE_CHOICE"
-          : question.type === "DESCRIPTIVE"
-            ? "ESSAY"
-            : question.type,
+      type: (() => {
+        const questionType = String(question.type || "");
+        if (questionType === "MCQ") return "MULTIPLE_CHOICE";
+        if (questionType === "DESCRIPTIVE") return "ESSAY";
+        return question.type;
+      })(),
       marks:
         typeof question.marks === "number" && question.marks > 0
           ? question.marks
@@ -392,7 +237,7 @@ interface Props {
           videoUrl: newLessonVideo || undefined,
           content: newLessonContent || undefined,
           resources: slideResource ? [slideResource] : [],
-          order: lessons.filter((l) => l.module === selectedModule).length,
+          order: lessons.filter((l) => String(l.module) === String(selectedModule)).length,
         }),
       }
     );
@@ -494,7 +339,12 @@ interface Props {
   function updateQuestion(
     i: number,
     field: keyof QuizQuestion,
-    value: string | number | string[] | undefined
+    value:
+      | string
+      | number
+      | string[]
+      | Array<{ left: string; right: string }>
+      | undefined
   ) {
     setQuestions((prev) => {
       const updated = [...prev];
@@ -504,6 +354,67 @@ interface Props {
   }
 
   async function saveQuiz() {
+    if (!quizTitle.trim()) {
+      setQuizMsg("Quiz title is required.");
+      return;
+    }
+
+    if (questions.length === 0) {
+      setQuizMsg("Add at least one question before saving.");
+      return;
+    }
+
+    const hasEmptyQuestion = questions.some((question) => !question.question?.trim());
+    if (hasEmptyQuestion) {
+      setQuizMsg("Each question needs question text before saving.");
+      return;
+    }
+
+    for (let index = 0; index < questions.length; index += 1) {
+      const question = questions[index];
+      const questionNumber = index + 1;
+
+      if (question.type === "MULTIPLE_CHOICE") {
+        const options = (question.options || []).map((option) => option.trim()).filter(Boolean);
+        if (options.length < 2) {
+          setQuizMsg(`Question ${questionNumber}: add at least 2 non-empty options.`);
+          return;
+        }
+        const selectedCorrect = question.correctIndex ?? 0;
+        if (selectedCorrect < 0 || selectedCorrect >= (question.options || []).length) {
+          setQuizMsg(`Question ${questionNumber}: select a valid correct option.`);
+          return;
+        }
+        if (!question.options?.[selectedCorrect]?.trim()) {
+          setQuizMsg(`Question ${questionNumber}: selected correct option cannot be empty.`);
+          return;
+        }
+      }
+
+      if (question.type === "SHORT_ANSWER") {
+        const acceptedAnswers = (question.acceptedAnswers || [])
+          .map((answer) => answer.trim())
+          .filter(Boolean);
+        if (acceptedAnswers.length === 0) {
+          setQuizMsg(`Question ${questionNumber}: add at least one accepted answer.`);
+          return;
+        }
+      }
+
+      if (question.type === "MATCHING") {
+        const matchingPairs = (question.matchingPairs || [])
+          .map((pair) => ({
+            left: pair.left.trim(),
+            right: pair.right.trim(),
+          }))
+          .filter((pair) => pair.left && pair.right);
+        if (matchingPairs.length < 2) {
+          setQuizMsg(`Question ${questionNumber}: add at least two complete matching pairs.`);
+          return;
+        }
+      }
+    }
+
     setSavingQuiz(true);
     setQuizMsg("");
 
@@ -596,7 +507,19 @@ interface Props {
       setQuiz(data);
       setQuizMsg("Quiz saved!");
       setTimeout(() => setQuizMsg(""), 3000);
+      return;
     }
+
+    let errorMessage = "Failed to save quiz.";
+    try {
+      const errorData = await res.json();
+      if (typeof errorData?.error === "string" && errorData.error.trim()) {
+        errorMessage = errorData.error;
+      }
+    } catch {
+      // no-op
+    }
+    setQuizMsg(errorMessage);
   }
 
   return (
@@ -761,7 +684,7 @@ interface Props {
               {/* Lessons */}
               <div className="divide-y divide-gray-50">
                 {lessons
-                  .filter((l) => l.module === m._id)
+                  .filter((l) => String(l.module) === String(m._id))
                   .map((l) => (
                     <div
                       key={l._id}
@@ -972,6 +895,154 @@ interface Props {
               max={100}
               className="w-32 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={quizDescription}
+              onChange={(e) => setQuizDescription(e.target.value)}
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              placeholder="Optional instructions for students"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Open quiz
+              </label>
+              <input
+                type="datetime-local"
+                value={quizOpenAt}
+                onChange={(e) => setQuizOpenAt(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Close quiz
+              </label>
+              <input
+                type="datetime-local"
+                value={quizCloseAt}
+                onChange={(e) => setQuizCloseAt(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Time limit (minutes)
+              </label>
+              <input
+                type="number"
+                value={quizTimeLimitMinutes}
+                onChange={(e) => setQuizTimeLimitMinutes(Number(e.target.value))}
+                min={1}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Attempts allowed
+              </label>
+              <input
+                type="number"
+                value={quizAttemptsAllowed}
+                onChange={(e) => setQuizAttemptsAllowed(Number(e.target.value))}
+                min={1}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Questions per page
+              </label>
+              <input
+                type="number"
+                value={quizQuestionsPerPage}
+                onChange={(e) => setQuizQuestionsPerPage(Number(e.target.value))}
+                min={1}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Grade category
+            </label>
+            <input
+              type="text"
+              value={quizGradeCategory}
+              onChange={(e) => setQuizGradeCategory(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              placeholder="Quiz"
+            />
+          </div>
+
+          <div>
+            <p className="block text-sm font-medium text-gray-700 mb-2">
+              Review options
+            </p>
+            <div className="flex flex-wrap gap-5">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={quizReviewOptions.showMarks}
+                  onChange={(e) =>
+                    setQuizReviewOptions((prev) => ({
+                      ...prev,
+                      showMarks: e.target.checked,
+                    }))
+                  }
+                />
+                Show marks
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={quizReviewOptions.showCorrectAnswers}
+                  onChange={(e) =>
+                    setQuizReviewOptions((prev) => ({
+                      ...prev,
+                      showCorrectAnswers: e.target.checked,
+                    }))
+                  }
+                />
+                Show correct answers
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={quizReviewOptions.showFeedback}
+                  onChange={(e) =>
+                    setQuizReviewOptions((prev) => ({
+                      ...prev,
+                      showFeedback: e.target.checked,
+                    }))
+                  }
+                />
+                Show feedback
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-gray-800">Questions</h4>
+            <button
+              type="button"
+              onClick={addQuestion}
+              className="border border-blue-300 text-blue-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50"
+            >
+              Add question
+            </button>
           </div>
 
           <div className="space-y-4">
@@ -1247,7 +1318,15 @@ interface Props {
               {savingQuiz ? "Saving..." : "Save and display"}
             </button>
             {quizMsg && (
-              <span className="text-green-600 text-sm">{quizMsg}</span>
+              <span
+                className={`text-sm ${
+                  quizMsg.toLowerCase().includes("saved")
+                    ? "text-green-600"
+                    : "text-red-600"
+                }`}
+              >
+                {quizMsg}
+              </span>
             )}
           </div>
         </div>
