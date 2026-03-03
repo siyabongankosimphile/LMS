@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/db";
 import Course from "@/models/Course";
 import Enrollment from "@/models/Enrollment";
 import DiscussionPost from "@/models/DiscussionPost";
+import mongoose from "mongoose";
 
 async function canAccessCourse(courseId: string, userId: string, role: string) {
   const course = await Course.findById(courseId).lean();
@@ -68,7 +69,10 @@ export async function POST(
     }
 
     const { id } = await params;
-    const { message } = (await req.json()) as { message?: string };
+    const { message, parentPostId } = (await req.json()) as {
+      message?: string;
+      parentPostId?: string;
+    };
 
     if (!message || !message.trim()) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
@@ -81,11 +85,27 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    let parentPost: string | null = null;
+    if (parentPostId) {
+      if (!mongoose.Types.ObjectId.isValid(parentPostId)) {
+        return NextResponse.json({ error: "Invalid parent post id" }, { status: 400 });
+      }
+      const existingParent = await DiscussionPost.findOne({
+        _id: parentPostId,
+        course: id,
+      }).lean();
+      if (!existingParent) {
+        return NextResponse.json({ error: "Parent post not found" }, { status: 404 });
+      }
+      parentPost = parentPostId;
+    }
+
     const post = await DiscussionPost.create({
       course: id,
       author: session.user.id,
       authorRole: session.user.role,
       message: message.trim(),
+      parentPost,
     });
 
     const created = await DiscussionPost.findById(post._id)

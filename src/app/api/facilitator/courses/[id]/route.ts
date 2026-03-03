@@ -65,13 +65,50 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { title, description, enrollmentKey, passMarkPercent, published } = body;
+    const {
+      title,
+      shortName,
+      category,
+      description,
+      enrollmentKey,
+      passMarkPercent,
+      published,
+      startDate,
+      endDate,
+      format,
+      groupMode,
+      gradeCategories,
+    } = body;
 
     if (title) course.title = title;
+    if (shortName !== undefined) course.shortName = shortName;
+    if (category !== undefined) course.category = category;
     if (description) course.description = description;
     if (enrollmentKey) course.enrollmentKeyHash = hashKey(enrollmentKey);
     if (passMarkPercent !== undefined) course.passMarkPercent = passMarkPercent;
     if (published !== undefined) course.published = published;
+    if (startDate !== undefined) {
+      course.startDate = startDate ? new Date(startDate) : undefined;
+    }
+    if (endDate !== undefined) {
+      course.endDate = endDate ? new Date(endDate) : undefined;
+    }
+    if (format !== undefined) course.format = format;
+    if (groupMode !== undefined) course.groupMode = groupMode;
+    if (Array.isArray(gradeCategories)) {
+      course.gradeCategories = gradeCategories
+        .filter(
+          (item) =>
+            item &&
+            typeof item.name === "string" &&
+            item.name.trim() &&
+            typeof item.weight === "number"
+        )
+        .map((item) => ({
+          name: item.name.trim(),
+          weight: Math.max(0, Math.min(100, item.weight)),
+        }));
+    }
 
     await course.save();
 

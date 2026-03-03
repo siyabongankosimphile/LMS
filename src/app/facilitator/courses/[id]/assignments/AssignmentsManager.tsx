@@ -250,7 +250,7 @@ export default function AssignmentsManager({ courseId }: { courseId: string }) {
                     : "border-gray-200 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700/40"
                 }`}
               >
-                <div className="font-medium text-gray-900 dark:text-white">{assignment.title}</div>
+                <div className="font-medium text-gray-900 dark:text-white break-words">{assignment.title}</div>
                 {assignment.dueAt && (
                   <div className="text-xs text-gray-500 dark:text-gray-300">
                     Due: {new Date(assignment.dueAt).toLocaleDateString()}
@@ -296,7 +296,7 @@ export default function AssignmentsManager({ courseId }: { courseId: string }) {
                     <p className="font-medium text-gray-900 dark:text-white">
                       {(submission.student?.name || "Student") + " " + (submission.student?.surname || "")}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-300">
+                    <p className="text-xs text-gray-500 dark:text-gray-300 break-all">
                       {submission.student?.email || ""}
                     </p>
                     {submission.content && (

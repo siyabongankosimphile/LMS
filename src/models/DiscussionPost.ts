@@ -6,6 +6,7 @@ export interface IDiscussionPost extends Document {
   author: mongoose.Types.ObjectId;
   authorRole: "ADMIN" | "FACILITATOR" | "STUDENT";
   message: string;
+  parentPost?: mongoose.Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,11 +21,13 @@ const DiscussionPostSchema = new Schema<IDiscussionPost>(
       required: true,
     },
     message: { type: String, required: true, trim: true, maxlength: 1000 },
+    parentPost: { type: Schema.Types.ObjectId, ref: "DiscussionPost", default: null },
   },
   { timestamps: true }
 );
 
 DiscussionPostSchema.index({ course: 1, createdAt: -1 });
+DiscussionPostSchema.index({ course: 1, parentPost: 1, createdAt: 1 });
 
 const DiscussionPost: Model<IDiscussionPost> =
   mongoose.models.DiscussionPost ||

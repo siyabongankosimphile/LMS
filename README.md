@@ -148,6 +148,20 @@ ADMIN_PASSWORD=YourSecurePassword
 ADMIN_NAME=Your Name
 ```
 
+### Optional: Repair malformed lesson module references
+
+If learners only see quizzes and not lessons, run:
+
+```bash
+npm run repair:lesson-modules:dry
+```
+
+Then apply fixes:
+
+```bash
+npm run repair:lesson-modules
+```
+
 ### 4. Run the development server
 
 ```bash

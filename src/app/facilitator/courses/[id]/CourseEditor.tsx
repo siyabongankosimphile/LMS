@@ -62,10 +62,17 @@ interface Quiz {
 interface Course {
   _id: string;
   title: string;
+  shortName?: string;
+  category?: string;
   description: string;
+  startDate?: string;
+  endDate?: string;
+  format?: "TOPICS" | "WEEKLY" | "GRID";
+  groupMode?: "NO_GROUPS" | "SEPARATE_GROUPS" | "VISIBLE_GROUPS";
   published: boolean;
   passMarkPercent: number;
   enrollmentKeyHash: string;
+  gradeCategories?: Array<{ name: string; weight: number }>;
 }
 
 interface Props {
@@ -94,7 +101,31 @@ export default function CourseEditor({
 
   // Overview form state
   const [title, setTitle] = useState(course.title);
+  const [shortName, setShortName] = useState(course.shortName || "");
+  const [category, setCategory] = useState(course.category || "");
   const [description, setDescription] = useState(course.description);
+  const [startDate, setStartDate] = useState(
+    course.startDate ? new Date(course.startDate).toISOString().slice(0, 10) : ""
+  );
+  const [endDate, setEndDate] = useState(
+    course.endDate ? new Date(course.endDate).toISOString().slice(0, 10) : ""
+  );
+  const [courseFormat, setCourseFormat] = useState<"TOPICS" | "WEEKLY" | "GRID">(
+    course.format || "TOPICS"
+  );
+  const [groupMode, setGroupMode] = useState<
+    "NO_GROUPS" | "SEPARATE_GROUPS" | "VISIBLE_GROUPS"
+  >(course.groupMode || "NO_GROUPS");
+  const [gradeCategories, setGradeCategories] = useState<
+    Array<{ name: string; weight: number }>
+  >(
+    course.gradeCategories && course.gradeCategories.length > 0
+      ? course.gradeCategories
+      : [
+          { name: "Homework", weight: 20 },
+          { name: "Tests", weight: 80 },
+        ]
+  );
   const [passMarkPercent, setPassMarkPercent] = useState(course.passMarkPercent);
   const [published, setPublished] = useState(course.published);
   const [enrollmentKey, setEnrollmentKey] = useState("");
@@ -172,7 +203,14 @@ export default function CourseEditor({
     setSaveMsg("");
     const body: Record<string, unknown> = {
       title,
+      shortName,
+      category,
       description,
+      startDate: startDate || null,
+      endDate: endDate || null,
+      format: courseFormat,
+      groupMode,
+      gradeCategories,
       passMarkPercent,
       published,
     };
@@ -524,7 +562,7 @@ export default function CourseEditor({
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex justify-between items-start mb-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{course.title}</h1>
           <div className="flex items-center gap-2 mt-1">
@@ -548,20 +586,22 @@ export default function CourseEditor({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-6">
-        {(["overview", "content", "quiz"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
-              activeTab === tab
-                ? "border-b-2 border-blue-600 text-blue-600"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+      <div className="mb-6 overflow-x-auto border-b border-gray-200">
+        <div className="flex min-w-max">
+          {(["overview", "content", "quiz"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
+                activeTab === tab
+                  ? "border-b-2 border-blue-600 text-blue-600"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Overview tab */}
@@ -576,6 +616,26 @@ export default function CourseEditor({
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Short Name</label>
+              <input
+                type="text"
+                value={shortName}
+                onChange={(e) => setShortName(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea
@@ -584,6 +644,114 @@ export default function CourseEditor({
               rows={4}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Course Format</label>
+              <select
+                value={courseFormat}
+                onChange={(e) => setCourseFormat(e.target.value as "TOPICS" | "WEEKLY" | "GRID")}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="TOPICS">Topics</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="GRID">Grid</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Group Mode</label>
+              <select
+                value={groupMode}
+                onChange={(e) =>
+                  setGroupMode(
+                    e.target.value as "NO_GROUPS" | "SEPARATE_GROUPS" | "VISIBLE_GROUPS"
+                  )
+                }
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="NO_GROUPS">No groups</option>
+                <option value="SEPARATE_GROUPS">Separate groups</option>
+                <option value="VISIBLE_GROUPS">Visible groups</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-700">Grade Categories</label>
+              <button
+                type="button"
+                onClick={() =>
+                  setGradeCategories((prev) => [...prev, { name: "", weight: 0 }])
+                }
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
+                + Add category
+              </button>
+            </div>
+            <div className="space-y-2">
+              {gradeCategories.map((item, idx) => (
+                <div key={`${idx}-${item.name}`} className="grid grid-cols-12 gap-2">
+                  <input
+                    type="text"
+                    value={item.name}
+                    onChange={(e) =>
+                      setGradeCategories((prev) =>
+                        prev.map((entry, index) =>
+                          index === idx ? { ...entry, name: e.target.value } : entry
+                        )
+                      )
+                    }
+                    placeholder="Category name"
+                    className="col-span-8 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={item.weight}
+                    onChange={(e) =>
+                      setGradeCategories((prev) =>
+                        prev.map((entry, index) =>
+                          index === idx
+                            ? { ...entry, weight: Number(e.target.value) || 0 }
+                            : entry
+                        )
+                      )
+                    }
+                    className="col-span-3 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setGradeCategories((prev) => prev.filter((_, index) => index !== idx))
+                    }
+                    className="col-span-1 text-red-600 text-xs hover:underline"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

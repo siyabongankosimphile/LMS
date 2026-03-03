@@ -49,8 +49,10 @@ export async function POST(req: NextRequest) {
     const isAdminOrFacilitator = ["FACILITATOR", "ADMIN"].includes(session.user.role);
     const isStudentSubmissionContext =
       session.user.role === "STUDENT" && context.startsWith("assignment-submissions/");
+    const isStudentPrivateContext =
+      session.user.role === "STUDENT" && context.startsWith("student-private");
 
-    if (!isAdminOrFacilitator && !isStudentSubmissionContext) {
+    if (!isAdminOrFacilitator && !isStudentSubmissionContext && !isStudentPrivateContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

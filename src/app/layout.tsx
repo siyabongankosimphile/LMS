@@ -28,7 +28,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+  try {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldUseDark = savedTheme ? savedTheme === 'dark' : prefersDark;
+    document.documentElement.classList.toggle('dark', shouldUseDark);
+    document.body?.classList.toggle('dark', shouldUseDark);
+  } catch {}
+})();`,
+          }}
+        />
+      </head>
       <body className={`${inter.variable} ${dmSans.variable} font-sans antialiased`}>
         {children}
         <Analytics />

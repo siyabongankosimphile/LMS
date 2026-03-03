@@ -15,6 +15,19 @@ interface Module {
   title: string;
 }
 
+function toIdString(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const nestedId = record._id ?? record.$oid;
+    if (typeof nestedId === "string") return nestedId;
+    if (typeof nestedId === "number") return String(nestedId);
+  }
+  return String(value);
+}
+
 interface QuizQuestion {
   type:
     | "MCQ"
@@ -124,6 +137,7 @@ export default function LearningClient({
     lessons[0] || null
   );
   const [showQuiz, setShowQuiz] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, unknown>>({});
   const [quizStartedAt, setQuizStartedAt] = useState<string>("");
   const [quizPage, setQuizPage] = useState(1);
@@ -332,11 +346,17 @@ export default function LearningClient({
   // Build module->lessons map properly
   const lessonsByModule: Record<string, Lesson[]> = {};
   for (const l of lessons) {
-    const lessonAny = l as Lesson & { module?: string };
-    const moduleId = lessonAny.module || "";
+    const lessonAny = l as Lesson & { module?: unknown };
+    const moduleId = toIdString(lessonAny.module);
     if (!lessonsByModule[moduleId]) lessonsByModule[moduleId] = [];
     lessonsByModule[moduleId].push(l);
   }
+
+  const moduleIdSet = new Set(modules.map((module) => toIdString(module._id)));
+  const ungroupedLessons = lessons.filter((lesson) => {
+    const lessonModuleId = toIdString((lesson as Lesson & { module?: unknown }).module);
+    return !moduleIdSet.has(lessonModuleId);
+  });
 
   const allQuestionsAnswered =
     quiz !== null &&
@@ -369,9 +389,20 @@ export default function LearningClient({
   const pagedQuestions = quiz ? quiz.questions.slice(pageStartIndex, pageEndIndex) : [];
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="flex min-h-[calc(100vh-4rem)] flex-col md:h-[calc(100vh-4rem)] md:flex-row">
+      <div className="border-b border-gray-200 bg-white px-4 py-3 md:hidden">
+        <button
+          type="button"
+          onClick={() => setShowSidebar((prev) => !prev)}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
+        >
+          {showSidebar ? "Hide course menu" : "Show course menu"}
+        </button>
+      </div>
       {/* Sidebar */}
-      <div className="w-72 bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0">
+      <div
+        className={`${showSidebar ? "block" : "hidden"} w-full bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0 md:block md:w-72`}
+      >
         <div className="p-4 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900 text-sm truncate">
             {course.title}
@@ -396,12 +427,13 @@ export default function LearningClient({
               <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 {m.title}
               </div>
-              {(lessonsByModule[m._id] || []).map((l) => (
+              {(lessonsByModule[toIdString(m._id)] || []).map((l) => (
                 <button
                   key={l._id}
                   onClick={() => {
                     setActiveLesson(l);
                     setShowQuiz(false);
+                    setShowSidebar(false);
                   }}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
                     activeLesson?._id === l._id
@@ -418,6 +450,34 @@ export default function LearningClient({
             </div>
           ))}
 
+          {ungroupedLessons.length > 0 && (
+            <div className="mb-3">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Course Lessons
+              </div>
+              {ungroupedLessons.map((l) => (
+                <button
+                  key={l._id}
+                  onClick={() => {
+                    setActiveLesson(l);
+                    setShowQuiz(false);
+                    setShowSidebar(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
+                    activeLesson?._id === l._id
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="text-xs">
+                    {completedIds.has(l._id) ? "✅" : "○"}
+                  </span>
+                  <span className="truncate">{l.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {quiz && (
             <button
               onClick={() => {
@@ -425,6 +485,7 @@ export default function LearningClient({
                 setQuizPage(1);
                 setQuizStartedAt(new Date().toISOString());
                 setQuizSubmitMsg("");
+                setShowSidebar(false);
               }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors mt-2 ${
                 showQuiz
@@ -445,7 +506,7 @@ export default function LearningClient({
       {/* Main content */}
       <div className="flex-1 overflow-y-auto">
         {showQuiz && quiz ? (
-          <div className="max-w-3xl mx-auto px-6 py-8">
+          <div className="max-w-3xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{quiz.title}</h2>
             {quiz.description && (
               <p className="text-sm text-gray-600 mb-2">{quiz.description}</p>
@@ -686,7 +747,7 @@ export default function LearningClient({
             )}
           </div>
         ) : activeLesson ? (
-          <div className="max-w-4xl mx-auto px-6 py-8">
+          <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">
               {activeLesson.title}
             </h2>

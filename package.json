@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "npx tsx src/scripts/seed.ts"
+    "seed": "npx tsx src/scripts/seed.ts",
+    "repair:lesson-modules": "npx tsx src/scripts/repair-lesson-module-ids.ts",
+    "repair:lesson-modules:dry": "npx tsx src/scripts/repair-lesson-module-ids.ts --dry-run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.995.0",

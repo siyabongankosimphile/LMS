@@ -46,7 +46,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { title, description, enrollmentKey, passMarkPercent, published } =
+    const {
+      title,
+      shortName,
+      category,
+      description,
+      enrollmentKey,
+      passMarkPercent,
+      published,
+      startDate,
+      endDate,
+      format,
+      groupMode,
+      gradeCategories,
+    } =
       await req.json();
 
     if (!title || !description || !enrollmentKey) {
@@ -60,11 +73,34 @@ export async function POST(req: NextRequest) {
 
     const course = await Course.create({
       title,
+      shortName,
+      category,
       description,
       facilitator: session.user.id,
       enrollmentKeyHash: hashKey(enrollmentKey),
       passMarkPercent: passMarkPercent || 70,
       published: published ?? false,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      format: format || "TOPICS",
+      groupMode: groupMode || "NO_GROUPS",
+      gradeCategories: Array.isArray(gradeCategories)
+        ? gradeCategories
+            .filter(
+              (item) =>
+                item &&
+                typeof item.name === "string" &&
+                item.name.trim() &&
+                typeof item.weight === "number"
+            )
+            .map((item) => ({
+              name: item.name.trim(),
+              weight: Math.max(0, Math.min(100, item.weight)),
+            }))
+        : [
+            { name: "Homework", weight: 20 },
+            { name: "Tests", weight: 80 },
+          ],
     });
 
     return NextResponse.json(course, { status: 201 });

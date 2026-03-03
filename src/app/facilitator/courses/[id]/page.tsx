@@ -6,7 +6,8 @@ import Course from "@/models/Course";
 import CourseModule from "@/models/Module";
 import Lesson from "@/models/Lesson";
 import Quiz from "@/models/Quiz";
-import CourseEditor from "./CourseEditor";
+import Assignment from "@/models/Assignment";
+import FacilitatorCourseShell from "./FacilitatorCourseShell";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -39,15 +40,19 @@ export default async function FacilitatorCoursePage({ params }: Props) {
     .sort({ order: 1 })
     .lean();
 
-  const quiz = await Quiz.findOne({ course: id }).lean();
+  const [quiz, assignments] = await Promise.all([
+    Quiz.findOne({ course: id }).lean(),
+    Assignment.find({ course: id }).sort({ dueAt: 1, createdAt: -1 }).lean(),
+  ]);
 
   return (
-    <CourseEditor
+    <FacilitatorCourseShell
       courseId={id}
       course={JSON.parse(JSON.stringify(course))}
       modules={JSON.parse(JSON.stringify(modules))}
       lessons={JSON.parse(JSON.stringify(lessons))}
       quiz={quiz ? JSON.parse(JSON.stringify(quiz)) : null}
+      assignments={JSON.parse(JSON.stringify(assignments))}
     />
   );
 }
