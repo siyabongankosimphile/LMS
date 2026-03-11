@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, DM_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -34,19 +35,19 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `(() => {
   try {
-    const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldUseDark = savedTheme ? savedTheme === 'dark' : prefersDark;
-    document.documentElement.classList.toggle('dark', shouldUseDark);
-    document.body?.classList.toggle('dark', shouldUseDark);
+    // Default to light on initial load; user-specific theme is applied client-side after session is known.
+    document.documentElement.classList.remove('dark');
+    document.body?.classList.remove('dark');
   } catch {}
 })();`,
           }}
         />
       </head>
       <body className={`${inter.variable} ${dmSans.variable} font-sans antialiased`}>
-        {children}
-        <Analytics />
+        <Providers>
+          {children}
+          <Analytics />
+        </Providers>
       </body>
     </html>
   );

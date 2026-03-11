@@ -1,13 +1,13 @@
 # Kayise IT Learning Management System (LMS)
 
-A full-featured LMS built with **Next.js 14 App Router**, **NextAuth v4**, **MongoDB (Mongoose)**, and **Tailwind CSS**.
+A full-featured LMS built with Next.js 15 App Router, NextAuth v4, MongoDB (Mongoose), and Tailwind CSS.
 
 ## Features
 
 ### Roles
-- **Admin** – manage users, approve/reject facilitators, view stats
-- **Facilitator** – create courses, modules, lessons, quizzes
-- **Student** – browse courses, enroll with a key, track progress, take quizzes, earn certificates
+- Admin - manage users, approve/reject facilitators, view stats
+- Facilitator - create courses, modules, lessons, quizzes, assignments, announcements
+- Student - browse courses, enroll with a key, track progress, take quizzes, earn certificates
 
 ### Auth
 - Email + Password (credentials) authentication
@@ -18,15 +18,17 @@ A full-featured LMS built with **Next.js 14 App Router**, **NextAuth v4**, **Mon
 ### Student Experience
 - Dashboard with enrolled courses, progress bars, and certificate downloads
 - Course catalog with enrollment-key-gated access
+- Course/module pages with collapsible sections (Announcements, Week/Topic blocks, Assignments, Quizzes, Final Project)
 - Lesson completion tracking with automatic progress calculation
-- MCQ quizzes with configurable pass marks
+- Quizzes with configurable pass marks and attempt limits
 - Auto-generated PDF certificates on course completion
 
 ### Facilitator Experience
 - Create and manage courses with enrollment keys (stored as SHA-256 hashes)
-- Manage modules and lessons (video URL + rich text content)
-- Create MCQ quizzes with configurable pass marks
-- File upload support (S3-compatible storage)
+- Manage modules and lessons (video URL + notes/content + multi-file resources + links)
+- Create quizzes, assignments, announcements, and graded feedback
+- Create-course flow redirects away from form after submit (to reduce accidental duplicates)
+- File upload support backed by MongoDB (GridFS)
 
 ### Admin Experience
 - Dashboard with key metrics (users, courses, enrollments)
@@ -81,11 +83,11 @@ A full-featured LMS built with **Next.js 14 App Router**, **NextAuth v4**, **Mon
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS |
+| Frontend | Next.js 15 (App Router), TypeScript, Tailwind CSS |
 | Backend | Next.js Route Handlers |
 | Auth | NextAuth v4 (Credentials + Google) |
 | Database | MongoDB via Mongoose |
-| File Storage | AWS S3 / S3-compatible (MinIO, Cloudflare R2, etc.) |
+| File Storage | MongoDB GridFS (served via `/api/files/[...key]`) |
 | PDF Generation | jsPDF |
 
 ## Quick Start
@@ -114,7 +116,7 @@ Edit `.env.local` with your values:
 ```env
 NEXTAUTH_SECRET=your-super-secret-key  # openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3000
-MONGODB_URI=mongodb://localhost:27017/lms
+MONGODB_URI=mongodb+srv://<dbUser>:<dbPassword>@cluster0.xxxxx.mongodb.net/lms?retryWrites=true&w=majority
 GOOGLE_CLIENT_ID=   # optional
 GOOGLE_CLIENT_SECRET=  # optional
 OPENAI_API_KEY=  # optional, for landing chat AI responses
@@ -122,16 +124,12 @@ OPENAI_API_KEY=  # optional, for landing chat AI responses
 # OPENAI_CHAT_URL=https://api.openai.com/v1/chat/completions
 ```
 
-For file uploads, configure S3 or a local MinIO instance:
+Atlas checklist:
+- Create a database user in MongoDB Atlas.
+- Add your machine/server IP to Atlas Network Access (or `0.0.0.0/0` for broad access).
+- Use the exact database name you want at the end of MONGODB_URI (here: `lms`).
 
-```env
-S3_REGION=us-east-1
-S3_BUCKET=lms-bucket
-S3_ACCESS_KEY_ID=your-key
-S3_SECRET_ACCESS_KEY=your-secret
-S3_ENDPOINT=http://localhost:9000   # for MinIO
-S3_FORCE_PATH_STYLE=true             # for MinIO
-```
+Note: file uploads now use MongoDB GridFS. No AWS/S3 variables are required.
 
 ### 3. Create the first admin user
 
@@ -170,91 +168,77 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Upload Notes
+
+- Default upload size limit: 50MB per file.
+- Uploaded files are stored in MongoDB GridFS and streamed through API routes.
+- Existing upload endpoint remains `/api/upload`.
+
 ## Project Structure
 
 ```
 src/
-├── app/
-│   ├── (auth)/
-│   │   ├── login/           # Sign-in page
-│   │   └── register/        # Registration page
-│   ├── admin/
-│   │   ├── page.tsx         # Admin dashboard
-│   │   ├── users/           # User management
-│   │   └── facilitators/    # Facilitator approvals
-│   ├── courses/
-│   │   ├── page.tsx         # Course catalog
-│   │   └── [id]/
-│   │       ├── page.tsx     # Course detail + enrollment
-│   │       └── learn/       # Learning interface
-│   ├── dashboard/           # Student dashboard
-│   ├── facilitator/
-│   │   ├── page.tsx         # Facilitator dashboard
-│   │   └── courses/
-│   │       ├── new/         # Create course
-│   │       └── [id]/        # Course editor (modules, lessons, quiz)
-│   └── api/
-│       ├── auth/[...nextauth]/
-│       ├── register/
-│       ├── courses/
-│       ├── enrollments/
-│       ├── quizzes/
-│       ├── certificates/
-│       ├── admin/
-│       ├── facilitator/
-│       ├── chat/
-│       └── upload/
-├── lib/
-│   ├── auth.ts       # NextAuth config
-│   ├── db.ts         # MongoDB connection
-│   ├── s3.ts         # S3 file storage abstraction
-│   └── certificate.ts # PDF certificate generation
-├── models/
-│   ├── User.ts
-│   ├── Course.ts
-│   ├── Module.ts
-│   ├── Lesson.ts
-│   ├── Enrollment.ts
-│   ├── Quiz.ts
-│   └── Certificate.ts
-├── scripts/
-│   └── seed.ts       # Admin user seeder
-└── middleware.ts      # Route protection (RBAC)
+|-- app/
+|   |-- (auth)/
+|   |   |-- login/           # Sign-in page
+|   |   `-- register/        # Registration page
+|   |-- admin/
+|   |   |-- page.tsx         # Admin dashboard
+|   |   |-- users/           # User management
+|   |   `-- facilitators/    # Facilitator approvals
+|   |-- courses/
+|   |   |-- page.tsx         # Course catalog
+|   |   `-- [id]/
+|   |       |-- page.tsx     # Course detail + enrollment
+|   |       `-- learn/       # Learning interface
+|   |-- dashboard/           # Student dashboard
+|   |-- facilitator/
+|   |   |-- page.tsx         # Facilitator dashboard
+|   |   `-- courses/
+|   |       |-- new/         # Create course
+|   |       `-- [id]/        # Course editor (modules, lessons, quiz)
+|   `-- api/
+|       |-- auth/[...nextauth]/
+|       |-- register/
+|       |-- courses/
+|       |-- enrollments/
+|       |-- quizzes/
+|       |-- certificates/
+|       |-- admin/
+|       |-- facilitator/
+|       |-- chat/
+|       |-- files/[...key]/
+|       `-- upload/
+|-- lib/
+|   |-- auth.ts        # NextAuth config
+|   |-- db.ts          # MongoDB connection
+|   |-- s3.ts          # File storage abstraction (MongoDB GridFS)
+|   `-- certificate.ts # PDF certificate generation
+|-- models/
+|   |-- User.ts
+|   |-- Course.ts
+|   |-- Module.ts
+|   |-- Lesson.ts
+|   |-- Enrollment.ts
+|   |-- Quiz.ts
+|   `-- Certificate.ts
+|-- scripts/
+|   `-- seed.ts        # Admin user seeder
+`-- middleware.ts      # Route protection (RBAC)
 ```
 
 ## Google OAuth Setup
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project → APIs & Services → Credentials
+1. Go to https://console.cloud.google.com/
+2. Create a project -> APIs & Services -> Credentials
 3. Create an OAuth 2.0 Client ID (Web application)
 4. Add `http://localhost:3000/api/auth/callback/google` to authorized redirect URIs
 5. Copy Client ID and Secret to `.env.local`
 
-## S3 / MinIO Setup (local dev)
-
-Start MinIO locally:
-```bash
-docker run -p 9000:9000 -p 9001:9001 \
-  -e MINIO_ROOT_USER=minioadmin \
-  -e MINIO_ROOT_PASSWORD=minioadmin \
-  minio/minio server /data --console-address ":9001"
-```
-
-Then configure:
-```env
-S3_ENDPOINT=http://localhost:9000
-S3_ACCESS_KEY_ID=minioadmin
-S3_SECRET_ACCESS_KEY=minioadmin
-S3_BUCKET=lms-bucket
-S3_FORCE_PATH_STYLE=true
-```
-
-Create the bucket in the MinIO console at [http://localhost:9001](http://localhost:9001).
-
 ## Deployment
 
 1. Set all environment variables in your deployment platform (Vercel, Railway, etc.)
-2. Set `NEXTAUTH_URL` to your production URL
+2. Set NEXTAUTH_URL to your production URL
 3. Run the seed script once against your production database
 
 ## License

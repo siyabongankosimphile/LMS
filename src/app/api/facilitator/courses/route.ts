@@ -71,8 +71,21 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
+    const normalizedTitle = String(title).trim();
+    const existing = await Course.findOne({
+      facilitator: session.user.id,
+      title: { $regex: `^${normalizedTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+    }).lean();
+
+    if (existing) {
+      return NextResponse.json(
+        { error: "A course with this title already exists for your account." },
+        { status: 409 }
+      );
+    }
+
     const course = await Course.create({
-      title,
+      title: normalizedTitle,
       shortName,
       category,
       description,

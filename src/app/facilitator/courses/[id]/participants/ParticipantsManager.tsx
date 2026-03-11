@@ -26,6 +26,11 @@ export default function ParticipantsManager({ courseId }: { courseId: string }) 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showEnrollForm, setShowEnrollForm] = useState(true);
+  const [actionMsg, setActionMsg] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [highlightedStudentId, setHighlightedStudentId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,22 +51,49 @@ export default function ParticipantsManager({ courseId }: { courseId: string }) 
 
   async function enrollStudent() {
     if (!selectedStudentId) return;
-    const res = await fetch(`/api/facilitator/courses/${courseId}/participants`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studentId: selectedStudentId }),
-    });
-    if (!res.ok) return;
-    setSelectedStudentId("");
-    await load();
+    setActionMsg("");
+    setActionError("");
+    setSaving(true);
+
+    try {
+      const enrolledStudentId = selectedStudentId;
+      const res = await fetch(`/api/facilitator/courses/${courseId}/participants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: selectedStudentId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data.error || "Failed to enroll student.");
+        return;
+      }
+
+      setSelectedStudentId("");
+      setShowEnrollForm(false);
+      setActionMsg("Student enrolled successfully.");
+      setHighlightedStudentId(enrolledStudentId);
+      await load();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function unenrollStudent(studentId: string) {
+    setActionMsg("");
+    setActionError("");
     const res = await fetch(
       `/api/facilitator/courses/${courseId}/participants?studentId=${studentId}`,
       { method: "DELETE" }
     );
-    if (!res.ok) return;
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setActionError(data.error || "Failed to unenroll student.");
+      return;
+    }
+    setActionMsg("Participant removed.");
+    if (highlightedStudentId === studentId) {
+      setHighlightedStudentId("");
+    }
     await load();
   }
 
@@ -72,36 +104,66 @@ export default function ParticipantsManager({ courseId }: { courseId: string }) 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-gray-800 mb-2">Manual enrolment</h2>
-        <div className="flex gap-2">
-          <select
-            value={selectedStudentId}
-            onChange={(event) => setSelectedStudentId(event.target.value)}
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">Select student...</option>
-            {candidates.map((student) => (
-              <option key={student._id} value={student._id}>
-                {(student.name || "Student") + " " + (student.surname || "")} • {student.email || ""}
-              </option>
-            ))}
-          </select>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-gray-800">Manual enrolment</h2>
           <button
             type="button"
-            onClick={enrollStudent}
-            disabled={!selectedStudentId}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            onClick={() => setShowEnrollForm((prev) => !prev)}
+            className="text-xs font-semibold text-blue-600 hover:underline"
           >
-            Enrol user
+            {showEnrollForm ? "Close form" : "Enrol participant"}
           </button>
         </div>
+        {actionError && (
+          <p className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {actionError}
+          </p>
+        )}
+        {actionMsg && (
+          <p className="mb-3 rounded border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+            {actionMsg}
+          </p>
+        )}
+        {showEnrollForm ? (
+          <div className="flex gap-2">
+            <select
+              value={selectedStudentId}
+              onChange={(event) => setSelectedStudentId(event.target.value)}
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">Select student...</option>
+              {candidates.map((student) => (
+                <option key={student._id} value={student._id}>
+                  {(student.name || "Student") + " " + (student.surname || "")} • {student.email || ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={enrollStudent}
+              disabled={!selectedStudentId || saving}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {saving ? "Enrolling..." : "Enrol user"}
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Form closed. Use &quot;Enrol participant&quot; to add another student.</p>
+        )}
       </section>
 
       <section className="rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-gray-800 mb-2">Participants ({participants.length})</h2>
         <div className="space-y-2">
           {participants.map((participant) => (
-            <div key={participant._id} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
+            <div
+              key={participant._id}
+              className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
+                highlightedStudentId && highlightedStudentId === String(participant.student?._id)
+                  ? "border-green-300 bg-green-50"
+                  : "border-gray-100"
+              }`}
+            >
               <div>
                 <p className="text-sm text-gray-800">
                   {(participant.student?.name || "Student") + " " + (participant.student?.surname || "")}

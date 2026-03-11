@@ -56,7 +56,7 @@ export default function NewCoursePage() {
         return;
       }
 
-      router.push(`/facilitator/courses/${data._id}`);
+      router.replace(`/facilitator/courses/${data._id}?created=1`);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -66,6 +66,23 @@ export default function NewCoursePage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={() => router.forward()}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          Forward
+        </button>
+      </div>
+
       <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Course</h1>
       <p className="text-gray-500 mb-8">Fill in the details for your new course</p>
 
@@ -251,6 +268,13 @@ export default function NewCoursePage() {
             className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
           >
             Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => router.forward()}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
+          >
+            Forward
           </button>
         </div>
       </form>

@@ -20,6 +20,7 @@ export interface IUser extends Document {
   role: "ADMIN" | "FACILITATOR" | "STUDENT";
   status: "ACTIVE" | "PENDING_APPROVAL" | "REJECTED";
   provider?: string;
+  lastLoginAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,6 +53,7 @@ const UserSchema = new Schema<IUser>(
       default: "ACTIVE",
     },
     provider: { type: String, default: "credentials" },
+    lastLoginAt: { type: Date },
   },
   { timestamps: true }
 );

@@ -2,8 +2,12 @@ import mongoose from "mongoose";
 import "@/models/Module";
 import "@/models/Lesson";
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/lms";
+const MONGODB_URI = process.env.MONGODB_URI ?? "";
 const dryRun = process.argv.includes("--dry-run");
+
+if (!MONGODB_URI) {
+  throw new Error("Please define MONGODB_URI (MongoDB Atlas URI) before running this script.");
+}
 
 function normalizeToIdString(value: unknown): string | null {
   if (!value) return null;

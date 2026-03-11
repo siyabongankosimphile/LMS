@@ -2,31 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { FaMoon, FaSun } from "react-icons/fa";
+import { useSession } from "next-auth/react";
 
 export default function DarkModeToggle() {
+  const { data: session, status } = useSession();
   const [isDark, setIsDark] = useState(false);
 
-  useEffect(() => {
+  function applyTheme(nextDark: boolean) {
     const root = document.documentElement;
     const body = document.body;
-    const savedTheme = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const shouldUseDark = savedTheme ? savedTheme === "dark" : prefersDark;
-
-    root.classList.toggle("dark", shouldUseDark);
-    body.classList.toggle("dark", shouldUseDark);
-    setIsDark(shouldUseDark);
-  }, []);
-
-  const toggleTheme = () => {
-    const root = document.documentElement;
-    const body = document.body;
-    const nextDark = !isDark;
-
     root.classList.toggle("dark", nextDark);
     body.classList.toggle("dark", nextDark);
-    localStorage.setItem("theme", nextDark ? "dark" : "light");
     setIsDark(nextDark);
+  }
+
+  useEffect(() => {
+    if (status === "loading") return;
+
+    const userId = session?.user?.id;
+    if (!userId) {
+      // Unauthenticated/default state should always be light.
+      applyTheme(false);
+      return;
+    }
+
+    const savedTheme = localStorage.getItem(`theme:${userId}`);
+    const shouldUseDark = savedTheme === "dark";
+    applyTheme(shouldUseDark);
+  }, [session?.user?.id, status]);
+
+  const toggleTheme = () => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+
+    const nextDark = !isDark;
+    applyTheme(nextDark);
+    localStorage.setItem(`theme:${userId}`, nextDark ? "dark" : "light");
   };
 
   return (

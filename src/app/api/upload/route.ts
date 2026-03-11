@@ -79,7 +79,8 @@ export async function POST(req: NextRequest) {
 
     const isAssignmentContext =
       context.startsWith("assignment-resources/") ||
-      context.startsWith("assignment-submissions/");
+      context.startsWith("assignment-submissions/") ||
+      context.startsWith("assignment-feedback/");
 
     if (isAssignmentContext) {
       const isAllowedByExtension = ASSIGNMENT_EXTENSIONS.some((extension) =>

@@ -64,6 +64,12 @@ export default function CourseActions({
         Participants
       </Link>
       <Link
+        href={`/facilitator/courses/${courseId}/announcements`}
+        className="text-amber-600 dark:text-amber-400 font-medium hover:underline text-xs"
+      >
+        Announcements
+      </Link>
+      <Link
         href={`/facilitator/courses/${courseId}/gradebook`}
         className="text-fuchsia-600 dark:text-fuchsia-400 font-medium hover:underline text-xs"
       >

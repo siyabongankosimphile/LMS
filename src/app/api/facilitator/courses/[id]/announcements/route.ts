@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Course from "@/models/Course";
-import Assignment from "@/models/Assignment";
+import Announcement from "@/models/Announcement";
 
 async function ownsCourse(courseId: string, userId: string, role: string) {
   const course = await Course.findById(courseId).lean();
@@ -30,11 +30,12 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const assignments = await Assignment.find({ course: id })
+    const announcements = await Announcement.find({ course: id })
+      .populate("createdBy", "name surname")
       .sort({ createdAt: -1 })
       .lean();
 
-    return NextResponse.json({ assignments });
+    return NextResponse.json({ announcements });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -52,22 +53,16 @@ export async function POST(
     }
 
     const { id } = await params;
-    const { title, description, dueAt, allowLateSubmissions, attachment } = (await req.json()) as {
+    const { title, message } = (await req.json()) as {
       title?: string;
-      description?: string;
-      dueAt?: string;
-      allowLateSubmissions?: boolean;
-      attachment?: {
-        url?: string;
-        key?: string;
-        name?: string;
-        contentType?: string;
-        size?: number;
-      };
+      message?: string;
     };
 
-    if (!title || !title.trim()) {
-      return NextResponse.json({ error: "Title is required" }, { status: 400 });
+    if (!title?.trim() || !message?.trim()) {
+      return NextResponse.json(
+        { error: "title and message are required" },
+        { status: 400 }
+      );
     }
 
     await connectDB();
@@ -77,26 +72,18 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const assignment = await Assignment.create({
+    const created = await Announcement.create({
       course: id,
       title: title.trim(),
-      description: description?.trim() || undefined,
-      dueAt: dueAt ? new Date(dueAt) : undefined,
-      allowLateSubmissions: allowLateSubmissions !== false,
-      attachment:
-        attachment?.url && attachment?.key && attachment?.name
-          ? {
-              url: attachment.url,
-              key: attachment.key,
-              name: attachment.name,
-              contentType: attachment.contentType,
-              size: attachment.size,
-            }
-          : undefined,
+      message: message.trim(),
       createdBy: session.user.id,
     });
 
-    return NextResponse.json({ assignment }, { status: 201 });
+    const populated = await Announcement.findById(created._id)
+      .populate("createdBy", "name surname")
+      .lean();
+
+    return NextResponse.json({ announcement: populated }, { status: 201 });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

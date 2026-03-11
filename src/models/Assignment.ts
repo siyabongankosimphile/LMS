@@ -6,6 +6,7 @@ export interface IAssignment extends Document {
   title: string;
   description?: string;
   dueAt?: Date;
+  allowLateSubmissions: boolean;
   attachment?: {
     url: string;
     key: string;
@@ -24,6 +25,7 @@ const AssignmentSchema = new Schema<IAssignment>(
     title: { type: String, required: true, trim: true },
     description: { type: String, trim: true },
     dueAt: { type: Date },
+    allowLateSubmissions: { type: Boolean, default: true },
     attachment: {
       url: { type: String, trim: true },
       key: { type: String, trim: true },

@@ -43,6 +43,8 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
+      const normalizedEmail = user.email?.trim().toLowerCase();
+
       if (account?.provider === "google") {
         await connectDB();
         const existing = await User.findOne({ email: user.email });
@@ -57,6 +59,15 @@ export const authOptions: NextAuthOptions = {
           });
         }
       }
+
+      if (normalizedEmail) {
+        await connectDB();
+        await User.findOneAndUpdate(
+          { email: normalizedEmail },
+          { $set: { lastLoginAt: new Date() } }
+        );
+      }
+
       return true;
     },
     async jwt({ token, user }) {

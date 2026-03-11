@@ -22,7 +22,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { answers, courseId, startedAt } = await req.json();
+    const { answers, courseId, startedAt, questionOrder, optionOrders } = await req.json();
     if (!answers || !courseId) {
       return NextResponse.json(
         { error: "answers and courseId are required" },
@@ -92,6 +92,24 @@ export async function POST(
 
     const submittedAnswers: unknown[] = Array.isArray(answers) ? answers : [];
 
+    const canonicalQuestionCount = quiz.questions.length;
+    const hasQuestionOrder =
+      Array.isArray(questionOrder) && questionOrder.length === canonicalQuestionCount;
+
+    const canonicalToDisplayedIndex = new Map<number, number>();
+    if (hasQuestionOrder) {
+      for (let displayIndex = 0; displayIndex < questionOrder.length; displayIndex += 1) {
+        const canonicalIndex = Number(questionOrder[displayIndex]);
+        if (!Number.isInteger(canonicalIndex) || canonicalIndex < 0 || canonicalIndex >= canonicalQuestionCount) {
+          return NextResponse.json({ error: "Invalid question order" }, { status: 400 });
+        }
+        if (canonicalToDisplayedIndex.has(canonicalIndex)) {
+          return NextResponse.json({ error: "Invalid question order" }, { status: 400 });
+        }
+        canonicalToDisplayedIndex.set(canonicalIndex, displayIndex);
+      }
+    }
+
     let earnedMarks = 0;
     let maxMarks = 0;
     let correct = 0;
@@ -107,12 +125,23 @@ export async function POST(
       maxMarks += marks;
 
       const type = question.type;
-      const submitted = submittedAnswers[index];
+      const displayIndex = hasQuestionOrder
+        ? canonicalToDisplayedIndex.get(index) ?? index
+        : index;
+      const submitted = submittedAnswers[displayIndex];
+      const questionOptionOrder =
+        optionOrders && typeof optionOrders === "object"
+          ? (optionOrders as Record<string, unknown>)[String(displayIndex)]
+          : undefined;
       let isCorrect = false;
       let questionEarned = 0;
 
       if (type === "MCQ" || type === "MULTIPLE_CHOICE" || type === "TRUE_FALSE") {
-        const submittedIndex = typeof submitted === "number" ? submitted : -1;
+        let submittedIndex = typeof submitted === "number" ? submitted : -1;
+        if (Array.isArray(questionOptionOrder) && submittedIndex >= 0) {
+          const mappedIndex = Number(questionOptionOrder[submittedIndex]);
+          submittedIndex = Number.isInteger(mappedIndex) ? mappedIndex : -1;
+        }
         if (typeof question.correctIndex === "number" && submittedIndex === question.correctIndex) {
           isCorrect = true;
           questionEarned = marks;
@@ -160,7 +189,7 @@ export async function POST(
       if (isCorrect) correct++;
 
       const result: Record<string, unknown> = {
-        index,
+        index: displayIndex,
         type,
         question: question.question,
       };

@@ -8,6 +8,14 @@ import Lesson from "@/models/Lesson";
 import Quiz from "@/models/Quiz";
 import Enrollment from "@/models/Enrollment";
 
+function resolveResourceUrl(resource?: { url?: string; key?: string }): string | undefined {
+  const value = String(resource?.url || "").trim();
+  if (value) return value;
+  const key = String(resource?.key || "").trim();
+  if (!key) return undefined;
+  return `/uploads/${key.replace(/^\/+/, "")}`;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -51,7 +59,12 @@ export async function GET(
         .map((l) => ({
           ...l,
           videoUrl: enrollment ? l.videoUrl : undefined,
-          resources: enrollment ? l.resources : [],
+          resources: enrollment
+            ? (l.resources || []).map((resource) => ({
+                ...resource,
+                url: resolveResourceUrl(resource),
+              }))
+            : [],
           content: enrollment ? l.content : undefined,
         })),
     }));

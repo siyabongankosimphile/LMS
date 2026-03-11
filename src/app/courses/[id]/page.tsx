@@ -9,6 +9,7 @@ import Enrollment from "@/models/Enrollment";
 import Assignment from "@/models/Assignment";
 import AssignmentSubmission from "@/models/AssignmentSubmission";
 import DiscussionPost from "@/models/DiscussionPost";
+import Announcement from "@/models/Announcement";
 import EnrollForm from "./EnrollForm";
 import Link from "next/link";
 import CourseStudentView from "./CourseStudentView";
@@ -34,48 +35,70 @@ export default async function CourseDetailPage({ params }: Props) {
     );
   }
 
-  const modules = await CourseModule.find({ course: id })
-    .sort({ order: 1 })
-    .lean();
+  const nowMs = Date.now();
+  const onlineThresholdDate = new Date(nowMs - 15 * 60 * 1000);
 
-  const lessons = await Lesson.find({ course: id })
-    .sort({ order: 1 })
-    .lean();
-
-  const quiz = await Quiz.findOne({ course: id }).lean();
-
-  const assignments = await Assignment.find({ course: id })
+  const modulesPromise = CourseModule.find({ course: id }).sort({ order: 1 }).lean();
+  const lessonsPromise = Lesson.find({ course: id }).sort({ order: 1 }).lean();
+  const quizPromise = Quiz.findOne({ course: id }).lean();
+  const assignmentsPromise = Assignment.find({ course: id })
     .sort({ dueAt: 1, createdAt: -1 })
     .lean();
-
-  const discussionPosts = await DiscussionPost.find({ course: id })
+  const discussionPostsPromise = DiscussionPost.find({ course: id })
     .populate("author", "name surname role")
     .sort({ createdAt: -1 })
     .limit(20)
     .lean();
-
-  const participants = await Enrollment.find({ course: id })
+  const announcementsPromise = Announcement.find({ course: id })
+    .populate("createdBy", "name surname")
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+  const participantsCountPromise = Enrollment.countDocuments({ course: id });
+  const onlineParticipantsPromise = Enrollment.find({
+    course: id,
+    updatedAt: { $gte: onlineThresholdDate },
+  })
     .populate("student", "name surname role")
     .sort({ updatedAt: -1 })
+    .limit(16)
     .lean();
+  const enrollmentPromise = session?.user?.id
+    ? Enrollment.findOne({ student: session.user.id, course: id }).lean()
+    : Promise.resolve(null);
+  const submissionsPromise =
+    session?.user?.id && session.user.role === "STUDENT"
+      ? AssignmentSubmission.find({
+          course: id,
+          student: session.user.id,
+        })
+          .select("assignment status")
+          .lean()
+      : Promise.resolve([] as Array<{ assignment: unknown; status: "SUBMITTED" | "GRADED" }>);
 
-  let enrollment = null;
-  let submissions: Array<{ assignment: unknown; status: "SUBMITTED" | "GRADED" }> = [];
-  if (session?.user?.id) {
-    enrollment = await Enrollment.findOne({
-      student: session.user.id,
-      course: id,
-    }).lean();
-
-    if (session.user.role === "STUDENT") {
-      submissions = await AssignmentSubmission.find({
-        course: id,
-        student: session.user.id,
-      })
-        .select("assignment status")
-        .lean();
-    }
-  }
+  const [
+    modules,
+    lessons,
+    quiz,
+    assignments,
+    discussionPosts,
+    announcements,
+    participantsCount,
+    onlineParticipants,
+    enrollment,
+    submissions,
+  ] = await Promise.all([
+    modulesPromise,
+    lessonsPromise,
+    quizPromise,
+    assignmentsPromise,
+    discussionPostsPromise,
+    announcementsPromise,
+    participantsCountPromise,
+    onlineParticipantsPromise,
+    enrollmentPromise,
+    submissionsPromise,
+  ]);
 
   const facilitator = course.facilitator as unknown as { name: string };
   const modulesWithLessons = modules.map((m) => ({
@@ -94,6 +117,13 @@ export default async function CourseDetailPage({ params }: Props) {
     title: assignment.title,
     description: assignment.description,
     dueAt: assignment.dueAt ? new Date(assignment.dueAt).toISOString() : undefined,
+    attachment: assignment.attachment
+      ? {
+          url: assignment.attachment.url,
+          key: assignment.attachment.key,
+          name: assignment.attachment.name,
+        }
+      : undefined,
     submissionStatus:
       submissionByAssignment.get(String(assignment._id)) || "NOT_SUBMITTED",
   })) as Array<{
@@ -101,10 +131,14 @@ export default async function CourseDetailPage({ params }: Props) {
     title: string;
     description?: string;
     dueAt?: string;
+    attachment?: {
+      url?: string;
+      key?: string;
+      name?: string;
+    };
     submissionStatus: "NOT_SUBMITTED" | "SUBMITTED" | "GRADED";
   }>;
 
-  const nowMs = Date.now();
   const upcomingEvents = assignmentsWithStatus
     .filter((assignment) => assignment.dueAt && new Date(assignment.dueAt).getTime() >= nowMs)
     .sort(
@@ -140,15 +174,7 @@ export default async function CourseDetailPage({ params }: Props) {
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     .slice(0, 12);
 
-  const onlineThreshold = nowMs - 15 * 60 * 1000;
-  const onlineUsers = participants
-    .filter((participant) => {
-      const lastSeen = new Date(
-        (participant as { updatedAt?: Date | string; enrolledAt?: Date | string })
-          .updatedAt || participant.enrolledAt
-      ).getTime();
-      return lastSeen >= onlineThreshold;
-    })
+  const participants = onlineParticipants
     .map((participant) => {
       const student = participant.student as unknown as {
         _id: string;
@@ -162,7 +188,7 @@ export default async function CourseDetailPage({ params }: Props) {
         role: String(student.role || "STUDENT"),
       };
     })
-    .slice(0, 8);
+    .slice(0, 12);
 
   if (enrollment && session?.user?.role === "STUDENT") {
     return (
@@ -172,6 +198,7 @@ export default async function CourseDetailPage({ params }: Props) {
         courseDescription={course.description}
         courseImage={course.thumbnail}
         facilitatorName={facilitator?.name || "Facilitator"}
+        courseFormat={course.format || "WEEKLY"}
         modules={modulesWithLessons.map((module) => ({
           _id: String(module._id),
           title: module.title,
@@ -184,10 +211,21 @@ export default async function CourseDetailPage({ params }: Props) {
               name: resource.name,
               type: resource.type,
               url: resource.url,
+              key: resource.key,
             })),
           })),
         }))}
         assignments={assignmentsWithStatus}
+        announcements={announcements.map((item) => {
+          const creator = item.createdBy as unknown as { name?: string; surname?: string };
+          return {
+            _id: String(item._id),
+            title: item.title,
+            message: item.message,
+            createdAt: new Date(item.createdAt).toISOString(),
+            createdByName: `${creator?.name || "User"} ${creator?.surname || ""}`.trim(),
+          };
+        })}
         quiz={
           quiz
             ? {
@@ -202,10 +240,10 @@ export default async function CourseDetailPage({ params }: Props) {
         progressPercent={enrollment.progressPercent}
         completedLessonsCount={(enrollment.completedLessons || []).length}
         totalLessons={totalLessons}
-        participantsCount={participants.length + 1}
+        participantsCount={participantsCount + 1}
         upcomingEvents={upcomingEvents}
         recentActivity={recentActivity}
-        onlineUsers={onlineUsers}
+        participants={participants}
       />
     );
   }

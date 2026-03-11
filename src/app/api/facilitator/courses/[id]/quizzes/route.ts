@@ -70,6 +70,8 @@ export async function POST(
       passMarkPercent,
       questionsPerPage,
       reviewOptions,
+      randomizeQuestions,
+      randomizeOptions,
       questions,
     } = await req.json();
 
@@ -237,6 +239,8 @@ export async function POST(
               : 70,
           questionsPerPage: normalizedQuestionsPerPage,
           reviewOptions: normalizedReviewOptions,
+          randomizeQuestions: randomizeQuestions === true,
+          randomizeOptions: randomizeOptions === true,
           questions: normalizedQuestions,
         },
       },

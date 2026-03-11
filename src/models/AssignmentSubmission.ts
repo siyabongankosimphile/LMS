@@ -16,6 +16,13 @@ export interface IAssignmentSubmission extends Document {
   status: "SUBMITTED" | "GRADED";
   score?: number;
   feedback?: string;
+  feedbackAttachment?: {
+    url: string;
+    key: string;
+    name: string;
+    contentType?: string;
+    size?: number;
+  };
   submittedAt: Date;
   gradedAt?: Date;
   gradedBy?: mongoose.Types.ObjectId;
@@ -47,6 +54,13 @@ const AssignmentSubmissionSchema = new Schema<IAssignmentSubmission>(
     },
     score: { type: Number, min: 0, max: 100 },
     feedback: { type: String, trim: true },
+    feedbackAttachment: {
+      url: { type: String, trim: true },
+      key: { type: String, trim: true },
+      name: { type: String, trim: true },
+      contentType: { type: String, trim: true },
+      size: { type: Number },
+    },
     submittedAt: { type: Date, default: Date.now },
     gradedAt: { type: Date },
     gradedBy: { type: Schema.Types.ObjectId, ref: "User" },

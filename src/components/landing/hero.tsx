@@ -16,7 +16,7 @@ export function Hero() {
             <Link href="#courses" className="rounded-full bg-cyan-300 px-8 py-3 font-semibold text-slate-900 shadow-lg shadow-cyan-500/30 transition hover:-translate-y-0.5 hover:bg-cyan-200">
               Explore Programs
             </Link>
-            <Link href="/register" className="rounded-full border-2 border-cyan-300 px-8 py-3 font-semibold text-cyan-300 transition hover:bg-cyan-300 hover:text-slate-900">
+            <Link href="/login" className="rounded-full border-2 border-cyan-300 px-8 py-3 font-semibold text-cyan-300 transition hover:bg-cyan-300 hover:text-slate-900">
               Get Started
             </Link>
           </div>

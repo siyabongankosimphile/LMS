@@ -69,6 +69,16 @@ export async function POST(
       order: order || 0,
     });
 
+    await Lesson.create({
+      module: createdModule._id,
+      course: id,
+      title: "Getting Started",
+      order: 0,
+      content:
+        "Your facilitator will add week materials here (slides, notes, links, videos, quizzes, and assignments).",
+      resources: [],
+    });
+
     return NextResponse.json(createdModule, { status: 201 });
   } catch (error) {
     console.error(error);

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 
 type CourseOverviewItem = {
   enrollmentId: string;
@@ -31,23 +31,33 @@ type BadgeItem = {
   fileUrl: string;
 };
 
-type PrivateFileItem = {
-  _id: string;
-  name: string;
-  url: string;
-  key: string;
-  contentType?: string;
-  size?: number;
-  createdAt: string;
+type EventItem = {
+  id: string;
+  kind: "ASSIGNMENT_DUE" | "QUIZ_OPEN" | "ANNOUNCEMENT";
+  courseId: string;
+  courseTitle: string;
+  title: string;
+  at: string;
+  href: string;
+  status?: "NOT_SUBMITTED" | "SUBMITTED" | "GRADED";
+};
+
+type NotificationItem = {
+  id: string;
+  type: "ANNOUNCEMENT" | "FORUM_REPLY" | "GRADED";
+  title: string;
+  detail: string;
+  at: string;
+  href: string;
 };
 
 type Props = {
   courses: CourseOverviewItem[];
   timeline: TimelineItem[];
   badges: BadgeItem[];
+  events: EventItem[];
+  notifications: NotificationItem[];
 };
-
-type CourseFilter = "IN_PROGRESS" | "FUTURE" | "PAST" | "STARRED";
 
 function toDateKey(date: Date): string {
   const y = date.getFullYear();
@@ -56,108 +66,91 @@ function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function formatBytes(size?: number): string {
-  if (!size || size <= 0) return "-";
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+function eventLabel(kind: EventItem["kind"]): string {
+  if (kind === "ASSIGNMENT_DUE") return "Assignment deadline";
+  if (kind === "QUIZ_OPEN") return "Quiz schedule";
+  return "Announcement";
 }
 
-export default function StudentDashboardClient({ courses, timeline, badges }: Props) {
-  const [activeFilter, setActiveFilter] = useState<CourseFilter>("IN_PROGRESS");
-  const [starredCourseIds, setStarredCourseIds] = useState<string[]>([]);
+export default function StudentDashboardClient({
+  courses,
+  timeline,
+  badges,
+  events,
+  notifications,
+}: Props) {
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [selectedDateKey, setSelectedDateKey] = useState<string>(toDateKey(new Date()));
-
-  const [privateFiles, setPrivateFiles] = useState<PrivateFileItem[]>([]);
-  const [privateFilesLoading, setPrivateFilesLoading] = useState(true);
-  const [uploadingPrivateFile, setUploadingPrivateFile] = useState(false);
-  const [privateFileError, setPrivateFileError] = useState("");
+  const [selectedDateKey, setSelectedDateKey] = useState(toDateKey(new Date()));
+  const [calendarDrawerOpen, setCalendarDrawerOpen] = useState(false);
+  const [readIds, setReadIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const key = "student_starred_courses";
-    const raw = window.localStorage.getItem(key);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as string[];
-        setStarredCourseIds(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        setStarredCourseIds([]);
-      }
-    }
-
-    const loadPrivateFiles = async () => {
-      const res = await fetch("/api/private-files");
-      if (!res.ok) {
-        setPrivateFilesLoading(false);
-        return;
-      }
+    const loadReadState = async () => {
+      const res = await fetch("/api/dashboard/notifications/read-state");
+      if (!res.ok) return;
       const data = await res.json();
-      setPrivateFiles(data.files || []);
-      setPrivateFilesLoading(false);
+      setReadIds(Array.isArray(data.readIds) ? data.readIds : []);
     };
 
-    loadPrivateFiles();
+    loadReadState();
   }, []);
 
-  function persistStars(next: string[]) {
-    setStarredCourseIds(next);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("student_starred_courses", JSON.stringify(next));
-    }
+  async function markAsRead(ids: string[]) {
+    if (ids.length === 0) return;
+    setReadIds((prev) => Array.from(new Set([...prev, ...ids])));
+    await fetch("/api/dashboard/notifications/read-state", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, read: true }),
+    });
   }
 
-  function toggleStar(courseId: string) {
-    const exists = starredCourseIds.includes(courseId);
-    if (exists) {
-      persistStars(starredCourseIds.filter((id) => id !== courseId));
-      return;
-    }
-    persistStars([...starredCourseIds, courseId]);
-  }
+  const unreadCount = useMemo(
+    () => notifications.filter((item) => !readIds.includes(item.id)).length,
+    [notifications, readIds]
+  );
 
-  const upcomingTimeline = useMemo(
-    () => {
-      const nowMs = Date.now();
-      return (
-      timeline
-        .filter((item) => new Date(item.dueAt).getTime() >= nowMs)
+  const recentCourses = useMemo(
+    () =>
+      [...courses]
+        .sort((a, b) => new Date(b.enrolledAt).getTime() - new Date(a.enrolledAt).getTime())
+        .slice(0, 6),
+    [courses]
+  );
+
+  const upcomingDeadlines = useMemo(
+    () =>
+      [...timeline]
+        .filter((item) => new Date(item.dueAt).getTime() >= Date.now())
         .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
-      );
-    },
+        .slice(0, 8),
     [timeline]
   );
 
-  const coursesByFilter = useMemo(() => {
-    if (activeFilter === "STARRED") {
-      return courses.filter((item) => starredCourseIds.includes(item.courseId));
-    }
-
-    if (activeFilter === "PAST") {
-      return courses.filter((item) => item.completed);
-    }
-
-    if (activeFilter === "FUTURE") {
-      return courses.filter((item) => !item.completed && item.progressPercent === 0);
-    }
-
-    return courses.filter((item) => !item.completed && item.progressPercent > 0);
-  }, [activeFilter, courses, starredCourseIds]);
+  const timelineItems = useMemo(
+    () =>
+      [...events]
+        .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+        .slice(0, 12),
+    [events]
+  );
 
   const eventsByDate = useMemo(() => {
-    const map = new Map<string, TimelineItem[]>();
-    for (const item of timeline) {
-      const key = toDateKey(new Date(item.dueAt));
+    const map = new Map<string, EventItem[]>();
+    for (const item of events) {
+      const key = toDateKey(new Date(item.at));
       const existing = map.get(key) || [];
       existing.push(item);
       map.set(key, existing);
     }
     return map;
-  }, [timeline]);
+  }, [events]);
+
+  const selectedDateEvents = eventsByDate.get(selectedDateKey) || [];
+  const todayKey = toDateKey(new Date());
 
   const daysInMonth = new Date(
     calendarMonth.getFullYear(),
@@ -177,332 +170,239 @@ export default function StudentDashboardClient({ courses, timeline, badges }: Pr
     calendarDays.push({ day, key });
   }
 
-  const selectedDateEvents = eventsByDate.get(selectedDateKey) || [];
-
-  function isOverdue(item: TimelineItem): boolean {
-    return (
-      new Date(item.dueAt).getTime() < Date.now() &&
-      item.submissionStatus === "NOT_SUBMITTED"
-    );
-  }
-
-  function hasOverdueOnDate(dateKey: string): boolean {
-    const items = eventsByDate.get(dateKey) || [];
-    return items.some((item) => isOverdue(item));
-  }
-
-  async function uploadPrivateFile(file: File) {
-    setPrivateFileError("");
-    setUploadingPrivateFile(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("context", "student-private");
-
-      const uploadRes = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!uploadRes.ok) {
-        setPrivateFileError("Upload failed.");
-        return;
-      }
-
-      const uploadData = await uploadRes.json();
-
-      const createRes = await fetch("/api/private-files", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: uploadData.name,
-          url: uploadData.url,
-          key: uploadData.key,
-          contentType: file.type,
-          size: file.size,
-        }),
-      });
-
-      if (!createRes.ok) {
-        setPrivateFileError("Failed to save file metadata.");
-        return;
-      }
-
-      const created = await createRes.json();
-      setPrivateFiles((prev) => [created, ...prev]);
-    } finally {
-      setUploadingPrivateFile(false);
-    }
-  }
-
-  async function removePrivateFile(id: string) {
-    const res = await fetch(`/api/private-files/${id}`, { method: "DELETE" });
-    if (!res.ok) return;
-    setPrivateFiles((prev) => prev.filter((file) => file._id !== id));
-  }
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-slate-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Timeline</h2>
-          {upcomingTimeline.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-300">No upcoming deadlines.</p>
-          ) : (
-            <div className="space-y-3">
-              {upcomingTimeline.slice(0, 8).map((item) => (
-                <div key={item.assignmentId} className="rounded-lg border border-gray-200 dark:border-slate-700 p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <Link href={`/courses/${item.courseId}/learn`} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline break-words">
-                      {item.courseTitle}
-                    </Link>
-                    <div className="flex items-center gap-2">
-                      {isOverdue(item) && (
-                        <span className="rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 px-2 py-0.5 text-[10px] font-semibold">
-                          OVERDUE
-                        </span>
-                      )}
-                      <span className="text-xs text-gray-500 dark:text-gray-300">
-                        Due {new Date(item.dueAt).toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" })}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-200">{item.assignmentTitle}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-slate-700">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Course Overview</h2>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { key: "IN_PROGRESS", label: "In progress" },
-                { key: "FUTURE", label: "Future" },
-                { key: "PAST", label: "Past" },
-                { key: "STARRED", label: "Starred" },
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => setActiveFilter(item.key as CourseFilter)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium border ${
-                    activeFilter === item.key
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-200 border-gray-300 dark:border-slate-600"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {coursesByFilter.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-300">No courses in this view.</p>
-          ) : (
-            <div className="space-y-3">
-              {coursesByFilter.map((item) => (
-                <div key={item.enrollmentId} className="rounded-lg border border-gray-200 dark:border-slate-700 p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <Link href={`/courses/${item.courseId}/learn`} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline break-words">
-                      {item.title}
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => toggleStar(item.courseId)}
-                      className="text-xs text-amber-600 dark:text-amber-400 hover:underline"
-                    >
-                      {starredCourseIds.includes(item.courseId) ? "★ Starred" : "☆ Star"}
-                    </button>
-                  </div>
-                  {item.description && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-300 line-clamp-2">{item.description}</p>
-                  )}
-                  <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-300">
-                    <span>{item.completed ? "Completed" : `${item.progressPercent}% progress`}</span>
-                    {typeof item.quizScore === "number" && <span>Grade: {item.quizScore}%</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+    <div className="space-y-5">
+      <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <span className="font-semibold text-gray-900 dark:text-white">Learner Home</span>
+          <Link href="/" className="text-blue-600 hover:underline dark:text-blue-400">Home</Link>
+          <Link href="/dashboard" className="text-blue-600 hover:underline dark:text-blue-400">Dashboard</Link>
+          <Link href="/courses" className="text-blue-600 hover:underline dark:text-blue-400">My Courses</Link>
+          <Link href="/dashboard/messages" className="text-blue-600 hover:underline dark:text-blue-400">
+            Messages {unreadCount > 0 ? `(${unreadCount})` : ""}
+          </Link>
+          <a href="#profile" className="text-blue-600 hover:underline dark:text-blue-400">Profile</a>
+          <Link href="/dashboard" className="ml-auto text-xs text-gray-500 hover:underline dark:text-gray-300">Refresh</Link>
         </div>
       </div>
 
-      <div className="space-y-6">
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-slate-700">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Calendar</h2>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setCalendarMonth(
-                    new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1)
-                  )
-                }
-                className="rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-700 dark:text-gray-200 px-2 py-1 text-xs"
-              >
-                Prev
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setCalendarMonth(
-                    new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1)
-                  )
-                }
-                className="rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-700 dark:text-gray-200 px-2 py-1 text-xs"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-
-          <p className="mb-2 text-xs text-gray-500 dark:text-gray-300">
-            {calendarMonth.toLocaleDateString("en-ZA", { month: "long", year: "numeric" })}
-          </p>
-
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-gray-500 dark:text-gray-300 mb-1">
-            {"SMTWTFS".split("").map((day, index) => (
-              <div key={`${day}-${index}`}>{day}</div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-1">
-            {calendarDays.map((entry, idx) => {
-              if (!entry) {
-                return <div key={`empty-${idx}`} className="h-8 rounded" />;
-              }
-
-              const eventsCount = (eventsByDate.get(entry.key) || []).length;
-              const selected = selectedDateKey === entry.key;
-              const overdueOnDate = hasOverdueOnDate(entry.key);
-
-              return (
-                <button
-                  key={entry.key}
-                  type="button"
-                  onClick={() => setSelectedDateKey(entry.key)}
-                  className={`h-8 rounded text-xs relative ${
-                    selected
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-50 dark:bg-slate-900 text-gray-700 dark:text-gray-200"
-                  }`}
-                >
-                  {entry.day}
-                  {eventsCount > 0 && (
-                    <span
-                      className={`absolute bottom-0.5 right-0.5 inline-flex h-1.5 w-1.5 rounded-full ${
-                        overdueOnDate ? "bg-red-600" : "bg-rose-500"
-                      }`}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-3">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-100 mb-1">
-              Due on {selectedDateKey}
-            </p>
-            {selectedDateEvents.length === 0 ? (
-              <p className="text-xs text-gray-500 dark:text-gray-300">Nothing due.</p>
+      <div className="grid gap-5 lg:grid-cols-12">
+        <section className="space-y-5 lg:col-span-8">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">My Courses</h2>
+            {courses.length === 0 ? (
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">No registered modules yet.</p>
             ) : (
-              <ul className="space-y-1">
-                {selectedDateEvents.map((event) => (
-                  <li key={event.assignmentId} className="text-xs text-gray-700 dark:text-gray-200 flex flex-wrap items-center gap-1">
-                    <span className="break-words">{event.courseTitle}: {event.assignmentTitle}</span>
-                    {isOverdue(event) && (
-                      <span className="rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 px-1.5 py-0.5 text-[10px] font-semibold">
-                        OVERDUE
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-slate-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Latest Badges</h2>
-          {badges.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-300">No badges yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {badges.slice(0, 4).map((badge) => (
-                <a
-                  key={badge.id}
-                  href={badge.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-lg border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-2"
-                >
-                  <p className="text-sm font-medium text-indigo-700 dark:text-indigo-200">🏅 {badge.label}</p>
-                  <p className="text-xs text-indigo-600 dark:text-indigo-300">
-                    {new Date(badge.issuedAt).toLocaleDateString("en-ZA")}
-                  </p>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-slate-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Private Files</h2>
-          <label className="block text-xs text-gray-600 dark:text-gray-300 mb-2">
-            Upload a private file
-          </label>
-          <input
-            type="file"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) uploadPrivateFile(file);
-              event.currentTarget.value = "";
-            }}
-            className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm"
-          />
-          {uploadingPrivateFile && <p className="mt-2 text-xs text-gray-500 dark:text-gray-300">Uploading...</p>}
-          {privateFileError && <p className="mt-2 text-xs text-red-600">{privateFileError}</p>}
-
-          <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
-            {privateFilesLoading ? (
-              <p className="text-xs text-gray-500 dark:text-gray-300">Loading files...</p>
-            ) : privateFiles.length === 0 ? (
-              <p className="text-xs text-gray-500 dark:text-gray-300">No private files yet.</p>
-            ) : (
-              privateFiles.map((file) => (
-                <div key={file._id} className="rounded-lg border border-gray-200 dark:border-slate-700 p-2">
-                  <a
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block truncate text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {courses.map((course) => (
+                  <Link
+                    key={course.enrollmentId}
+                    href={`/courses/${course.courseId}`}
+                    className="rounded-lg border border-gray-200 p-3 transition hover:border-blue-300 hover:bg-blue-50/30 dark:border-slate-700 dark:hover:bg-slate-700/40"
                   >
-                    {file.name}
-                  </a>
-                  <div className="mt-1 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-300">
-                    <span>{formatBytes(file.size)}</span>
-                    <button
-                      type="button"
-                      onClick={() => removePrivateFile(file._id)}
-                      className="text-red-600 dark:text-red-400 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
+                    <p className="font-medium text-gray-900 dark:text-white">{course.title}</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">{course.progressPercent}% progress</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Course Overview</h2>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300">Recently accessed courses</p>
+                <div className="mt-2 space-y-2">
+                  {recentCourses.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-300">No recent course activity yet.</p>
+                  ) : (
+                    recentCourses.map((course) => (
+                      <Link key={`recent-${course.enrollmentId}`} href={`/courses/${course.courseId}`} className="block text-sm text-blue-600 hover:underline dark:text-blue-400">
+                        {course.title}
+                      </Link>
+                    ))
+                  )}
                 </div>
-              ))
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300">Upcoming deadlines</p>
+                <div className="mt-2 space-y-2">
+                  {upcomingDeadlines.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-300">No upcoming deadlines.</p>
+                  ) : (
+                    upcomingDeadlines.map((item) => (
+                      <Link key={item.assignmentId} href={`/courses/${item.courseId}/learn`} className="block rounded-md border border-gray-200 px-2 py-1 text-sm hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700/40">
+                        <span className="font-medium text-gray-800 dark:text-gray-100">{item.assignmentTitle}</span>
+                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-300">{new Date(item.dueAt).toLocaleDateString("en-ZA")}</span>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {badges.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Achievements</h2>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {badges.map((badge) => (
+                  <a key={badge.id} href={badge.fileUrl} target="_blank" rel="noopener noreferrer" className="rounded-md border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700/40">
+                    {badge.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <aside className="space-y-5 lg:col-span-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Timeline</h3>
+            <div className="mt-3 space-y-2">
+              {timelineItems.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-300">No timeline items yet.</p>
+              ) : (
+                timelineItems.map((item) => (
+                  <Link key={item.id} href={item.href} className="block rounded-md border border-gray-200 px-2 py-2 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700/40">
+                    <p className="text-xs text-gray-500 dark:text-gray-300">{eventLabel(item.kind)}</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{item.title}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-300">{item.courseTitle} - {new Date(item.at).toLocaleDateString("en-ZA")}</p>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Calendar</h3>
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCalendarMonth(
+                      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1)
+                    )
+                  }
+                  className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700"
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCalendarMonth(
+                      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1)
+                    )
+                  }
+                  className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+            <p className="mb-2 text-sm text-gray-600 dark:text-gray-200">
+              {calendarMonth.toLocaleDateString("en-ZA", { month: "long", year: "numeric" })}
+            </p>
+            <div className="grid grid-cols-7 gap-1 text-center text-xs">
+              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                <div key={day} className="font-semibold text-gray-500 dark:text-gray-300">{day}</div>
+              ))}
+              {calendarDays.map((item, idx) => {
+                if (!item) return <div key={`empty-${idx}`} className="h-8" />;
+                const hasEvents = (eventsByDate.get(item.key) || []).length > 0;
+                const isToday = item.key === todayKey;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDateKey(item.key);
+                      setCalendarDrawerOpen(true);
+                    }}
+                    className={`flex h-8 items-center justify-center rounded border text-xs ${
+                      hasEvents
+                        ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-500/20 dark:text-blue-200"
+                        : "border-gray-200 text-gray-600 dark:border-slate-700 dark:text-gray-300"
+                    } ${isToday ? "ring-1 ring-emerald-400" : ""}`}
+                  >
+                    {item.day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div id="messages" className="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Messages / Notifications</h3>
+              <Link href="/dashboard/messages" className="text-xs text-blue-600 hover:underline dark:text-blue-400">Open all</Link>
+            </div>
+            <div className="mt-3 space-y-2">
+              {notifications.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-300">No notifications yet.</p>
+              ) : (
+                notifications.slice(0, 12).map((item) => {
+                  const isRead = readIds.includes(item.id);
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      onClick={() => {
+                        if (!isRead) void markAsRead([item.id]);
+                      }}
+                      className={`block rounded-md border px-2 py-2 hover:bg-gray-50 dark:hover:bg-slate-700/40 ${
+                        isRead
+                          ? "border-gray-200 dark:border-slate-700"
+                          : "border-blue-200 bg-blue-50/60 dark:border-blue-600/50 dark:bg-blue-500/10"
+                      }`}
+                    >
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{item.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-300">{item.detail}</p>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-400">{new Date(item.at).toLocaleString("en-ZA")}</p>
+                    </Link>
+                  );
+                })
+              )}
+            </div>
+            <div id="profile" className="mt-3 border-t border-gray-200 pt-2 text-xs text-gray-500 dark:border-slate-700 dark:text-gray-300">
+              Use Profile settings from the top-right menu to update your account.
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {calendarDrawerOpen && (
+        <div className="fixed inset-0 z-40 flex justify-end bg-black/30">
+          <div className="h-full w-full max-w-md overflow-y-auto bg-white p-4 shadow-xl dark:bg-slate-800">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Schedule for {selectedDateKey}</h3>
+              <button
+                type="button"
+                onClick={() => setCalendarDrawerOpen(false)}
+                className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700"
+              >
+                Close
+              </button>
+            </div>
+            {selectedDateEvents.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-300">No scheduled activities for this date.</p>
+            ) : (
+              <div className="space-y-2">
+                {selectedDateEvents.map((item) => (
+                  <Link key={item.id} href={item.href} className="block rounded-md border border-gray-200 px-3 py-2 hover:bg-gray-50 dark:border-slate-700 dark:hover:bg-slate-700/40">
+                    <p className="text-xs text-gray-500 dark:text-gray-300">{eventLabel(item.kind)}</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{item.title}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-300">{item.courseTitle}</p>
+                  </Link>
+                ))}
+              </div>
             )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

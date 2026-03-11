@@ -32,9 +32,16 @@ export async function PATCH(
     }
 
     const { id, submissionId } = await params;
-    const { score, feedback } = (await req.json()) as {
+    const { score, feedback, feedbackAttachment } = (await req.json()) as {
       score?: number;
       feedback?: string;
+      feedbackAttachment?: {
+        url?: string;
+        key?: string;
+        name?: string;
+        contentType?: string;
+        size?: number;
+      };
     };
 
     if (typeof score !== "number" || score < 0 || score > 100) {
@@ -54,6 +61,18 @@ export async function PATCH(
         $set: {
           score,
           feedback: feedback?.trim() || "",
+          feedbackAttachment:
+            feedbackAttachment?.url &&
+            feedbackAttachment?.key &&
+            feedbackAttachment?.name
+              ? {
+                  url: feedbackAttachment.url,
+                  key: feedbackAttachment.key,
+                  name: feedbackAttachment.name,
+                  contentType: feedbackAttachment.contentType,
+                  size: feedbackAttachment.size,
+                }
+              : undefined,
           status: "GRADED",
           gradedAt: new Date(),
           gradedBy: session.user.id,

@@ -7,7 +7,22 @@ interface Lesson {
   title: string;
   videoUrl?: string;
   content?: string;
-  resources?: Array<{ name: string; type: string; url: string }>;
+  resources?: Array<{ name: string; type: string; url?: string; key?: string }>;
+}
+
+function normalizeUrl(raw?: string): string {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (/^(https?:|mailto:|tel:|\/)/i.test(value)) return value;
+  return `https://${value}`;
+}
+
+function resolveResourceUrl(resource?: { url?: string; key?: string }): string {
+  const normalized = normalizeUrl(resource?.url);
+  if (normalized) return normalized;
+  const key = String(resource?.key || "").trim();
+  if (!key) return "";
+  return `/uploads/${key.replace(/^\/+/, "")}`;
 }
 
 interface Module {
@@ -26,6 +41,15 @@ function toIdString(value: unknown): string {
     if (typeof nestedId === "number") return String(nestedId);
   }
   return String(value);
+}
+
+function shuffleArray<T>(values: T[]): T[] {
+  const next = [...values];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
 }
 
 interface QuizQuestion {
@@ -64,6 +88,8 @@ interface Quiz {
     showCorrectAnswers?: boolean;
     showFeedback?: boolean;
   };
+  randomizeQuestions?: boolean;
+  randomizeOptions?: boolean;
 }
 
 interface Enrollment {
@@ -90,6 +116,10 @@ interface AssignmentSubmission {
   status: "SUBMITTED" | "GRADED";
   score?: number;
   feedback?: string;
+  feedbackAttachment?: {
+    url: string;
+    name: string;
+  };
 }
 
 interface Assignment {
@@ -97,11 +127,23 @@ interface Assignment {
   title: string;
   description?: string;
   dueAt?: string;
+  allowLateSubmissions?: boolean;
   attachment?: {
     url: string;
     name: string;
   };
   mySubmission?: AssignmentSubmission | null;
+}
+
+interface Announcement {
+  _id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  createdBy?: {
+    name?: string;
+    surname?: string;
+  };
 }
 
 interface DiscussionPost {
@@ -131,16 +173,17 @@ export default function LearningClient({
   enrollment: initialEnrollment,
   certificate: initialCertificate,
 }: Props) {
+  const firstLesson = lessons[0] || null;
   const [enrollment, setEnrollment] = useState(initialEnrollment);
   const [certificate, setCertificate] = useState(initialCertificate);
-  const [activeLesson, setActiveLesson] = useState<Lesson | null>(
-    lessons[0] || null
-  );
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(firstLesson);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, unknown>>({});
   const [quizStartedAt, setQuizStartedAt] = useState<string>("");
   const [quizPage, setQuizPage] = useState(1);
+  const [quizQuestionOrder, setQuizQuestionOrder] = useState<number[]>([]);
+  const [quizOptionOrders, setQuizOptionOrders] = useState<Record<number, number[]>>({});
   const [quizResult, setQuizResult] = useState<{
     scorePercent: number;
     passed: boolean;
@@ -173,6 +216,7 @@ export default function LearningClient({
   const [discussionPosts, setDiscussionPosts] = useState<DiscussionPost[]>([]);
   const [discussionMessage, setDiscussionMessage] = useState("");
   const [postingDiscussion, setPostingDiscussion] = useState(false);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   const completedIds = new Set(enrollment.completedLessons || []);
 
@@ -200,10 +244,62 @@ export default function LearningClient({
     setDiscussionPosts(data.posts || []);
   }, [courseId]);
 
+  const loadAnnouncements = useCallback(async () => {
+    const res = await fetch(`/api/courses/${courseId}/announcements`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setAnnouncements(data.announcements || []);
+  }, [courseId]);
+
   useEffect(() => {
     loadAssignments();
     loadDiscussion();
-  }, [loadAssignments, loadDiscussion]);
+    loadAnnouncements();
+  }, [loadAssignments, loadDiscussion, loadAnnouncements]);
+
+  function initializeQuizAttempt() {
+    if (!quiz) return;
+    const defaultOrder = quiz.questions.map((_, index) => index);
+    const questionOrder = quiz.randomizeQuestions ? shuffleArray(defaultOrder) : defaultOrder;
+
+    const optionOrders: Record<number, number[]> = {};
+    questionOrder.forEach((canonicalQuestionIndex, displayIndex) => {
+      const question = quiz.questions[canonicalQuestionIndex];
+      if (!question) return;
+      const isObjective =
+        question.type === "MCQ" ||
+        question.type === "MULTIPLE_CHOICE" ||
+        question.type === "TRUE_FALSE";
+      if (!isObjective || !quiz.randomizeOptions) return;
+
+      const baseOptionCount =
+        question.type === "TRUE_FALSE"
+          ? 2
+          : Array.isArray(question.options)
+            ? question.options.length
+            : 0;
+
+      if (baseOptionCount > 1) {
+        optionOrders[displayIndex] = shuffleArray(
+          Array.from({ length: baseOptionCount }, (_, idx) => idx)
+        );
+      }
+    });
+
+    setQuizQuestionOrder(questionOrder);
+    setQuizOptionOrders(optionOrders);
+    setQuizAnswers({});
+    setQuizResult(null);
+    setQuizPage(1);
+    setQuizStartedAt(new Date().toISOString());
+    setQuizSubmitMsg("");
+  }
+
+  useEffect(() => {
+    if (!activeLesson && firstLesson) {
+      setActiveLesson(firstLesson);
+    }
+  }, [activeLesson, firstLesson]);
 
   async function markComplete(lessonId: string) {
     const res = await fetch(`/api/enrollments/${courseId}/progress`, {
@@ -239,11 +335,22 @@ export default function LearningClient({
     if (!quizStartedAt) {
       setQuizStartedAt(startedAt);
     }
-    const answers = quiz.questions.map((_, i) => quizAnswers[i] ?? null);
+    const answerCount =
+      quizQuestionOrder.length === quiz.questions.length
+        ? quizQuestionOrder.length
+        : quiz.questions.length;
+    const answers = Array.from({ length: answerCount }, (_, i) => quizAnswers[i] ?? null);
     const res = await fetch(`/api/quizzes/${quiz._id}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers, courseId, startedAt }),
+      body: JSON.stringify({
+        answers,
+        courseId,
+        startedAt,
+        questionOrder:
+          quizQuestionOrder.length === quiz.questions.length ? quizQuestionOrder : undefined,
+        optionOrders: Object.keys(quizOptionOrders).length > 0 ? quizOptionOrders : undefined,
+      }),
     });
     setSubmitting(false);
     if (res.ok) {
@@ -358,11 +465,19 @@ export default function LearningClient({
     return !moduleIdSet.has(lessonModuleId);
   });
 
+  const activeQuestionOrder =
+    quiz && quizQuestionOrder.length === quiz.questions.length
+      ? quizQuestionOrder
+      : quiz?.questions.map((_, index) => index) || [];
+
   const allQuestionsAnswered =
     quiz !== null &&
-    quiz.questions.every((question, index) => {
-      const answer = quizAnswers[index];
-      const type = question.type;
+    activeQuestionOrder.every((canonicalQuestionIndex, displayIndex) => {
+      const question = quiz.questions[canonicalQuestionIndex];
+      const answer = quizAnswers[displayIndex];
+      const type = question?.type;
+
+      if (!question) return false;
 
       if (type === "MCQ" || type === "MULTIPLE_CHOICE" || type === "TRUE_FALSE") {
         return typeof answer === "number";
@@ -383,10 +498,12 @@ export default function LearningClient({
     });
 
   const questionsPerPage = Math.max(1, quiz?.questionsPerPage || 5);
-  const totalQuizPages = quiz ? Math.ceil(quiz.questions.length / questionsPerPage) : 1;
+  const totalQuizPages = quiz ? Math.ceil(activeQuestionOrder.length / questionsPerPage) : 1;
   const pageStartIndex = (quizPage - 1) * questionsPerPage;
   const pageEndIndex = pageStartIndex + questionsPerPage;
-  const pagedQuestions = quiz ? quiz.questions.slice(pageStartIndex, pageEndIndex) : [];
+  const pagedQuestionSlots = activeQuestionOrder.slice(pageStartIndex, pageEndIndex);
+  const hasNonLessonContent =
+    assignments.length > 0 || announcements.length > 0 || discussionPosts.length > 0 || !!quiz;
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] flex-col md:h-[calc(100vh-4rem)] md:flex-row">
@@ -482,9 +599,7 @@ export default function LearningClient({
             <button
               onClick={() => {
                 setShowQuiz(true);
-                setQuizPage(1);
-                setQuizStartedAt(new Date().toISOString());
-                setQuizSubmitMsg("");
+                initializeQuizAttempt();
                 setShowSidebar(false);
               }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors mt-2 ${
@@ -574,10 +689,7 @@ export default function LearningClient({
                 {!quizResult.passed && (
                   <button
                     onClick={() => {
-                      setQuizResult(null);
-                      setQuizAnswers({});
-                      setQuizStartedAt(new Date().toISOString());
-                      setQuizPage(1);
+                      initializeQuizAttempt();
                     }}
                     className="mt-3 text-blue-600 text-sm font-medium hover:underline"
                   >
@@ -587,13 +699,22 @@ export default function LearningClient({
               </div>
             ) : (
               <div className="space-y-6">
-                {pagedQuestions.map((q, localIndex) => {
+                {pagedQuestionSlots.map((canonicalQuestionIndex, localIndex) => {
                   const i = pageStartIndex + localIndex;
+                  const q = quiz.questions[canonicalQuestionIndex];
+                  const optionOrder = quizOptionOrders[i];
                   const matchingPairs = q.matchingPairs || [];
                   const matchingAnswer =
                     quizAnswers[i] && typeof quizAnswers[i] === "object"
                       ? (quizAnswers[i] as Record<string, string>)
                       : {};
+
+                  const baseOptions =
+                    q.type === "TRUE_FALSE" ? ["True", "False"] : q.options || [];
+                  const displayedOptions =
+                    Array.isArray(optionOrder) && optionOrder.length === baseOptions.length
+                      ? optionOrder.map((optionIndex) => baseOptions[optionIndex])
+                      : baseOptions;
 
                   return (
                   <div key={i} className="bg-white rounded-xl border border-gray-100 p-5">
@@ -602,7 +723,7 @@ export default function LearningClient({
                     </p>
                     {(q.type === "MCQ" || q.type === "MULTIPLE_CHOICE" || q.type === "TRUE_FALSE") && (
                       <div className="space-y-2">
-                        {(q.type === "TRUE_FALSE" ? ["True", "False"] : q.options || []).map((opt, j) => (
+                        {displayedOptions.map((opt, j) => (
                           <label
                             key={j}
                             className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -773,18 +894,30 @@ export default function LearningClient({
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 mb-3">Resources</h3>
                 <div className="space-y-2">
-                  {activeLesson.resources.map((r, i) => (
-                    <a
-                      key={i}
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-blue-600 hover:underline text-sm"
-                    >
-                      <span>{r.type === "file" ? "📎" : "🔗"}</span>
-                      {r.name}
-                    </a>
-                  ))}
+                  {activeLesson.resources.map((r, i) => {
+                    const href = resolveResourceUrl(r);
+                    if (!href) {
+                      return (
+                        <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                          <span>{r.type === "file" ? "📎" : "🔗"}</span>
+                          {r.name}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <a
+                        key={i}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-blue-600 hover:underline text-sm"
+                      >
+                        <span>{r.type === "file" ? "📎" : "🔗"}</span>
+                        {r.name}
+                      </a>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -806,6 +939,9 @@ export default function LearningClient({
                           Due: {new Date(assignment.dueAt).toLocaleDateString()}
                         </p>
                       )}
+                      <p className="mt-1 text-xs text-gray-500">
+                        Late submissions: {assignment.allowLateSubmissions === false ? "Disabled" : "Allowed"}
+                      </p>
                       {assignment.attachment?.url && (
                         <a
                           href={assignment.attachment.url}
@@ -881,6 +1017,16 @@ export default function LearningClient({
                           Feedback: {assignment.mySubmission.feedback}
                         </p>
                       )}
+                      {assignment.mySubmission?.feedbackAttachment?.url && (
+                        <a
+                          href={assignment.mySubmission.feedbackAttachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-block text-xs text-blue-600 hover:underline"
+                        >
+                          Feedback file: {assignment.mySubmission.feedbackAttachment.name}
+                        </a>
+                      )}
                       {assignment.mySubmission?.attachment?.url && (
                         <a
                           href={assignment.mySubmission.attachment.url}
@@ -891,6 +1037,25 @@ export default function LearningClient({
                           Your uploaded file: {assignment.mySubmission.attachment.name}
                         </a>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+              <h3 className="mb-3 font-semibold text-gray-900">Announcements</h3>
+              {announcements.length === 0 ? (
+                <p className="text-sm text-gray-500">No announcements yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {announcements.map((announcement) => (
+                    <div key={announcement._id} className="rounded-lg border border-gray-200 p-3">
+                      <p className="font-medium text-gray-900">{announcement.title}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{announcement.message}</p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {new Date(announcement.createdAt).toLocaleString("en-ZA")} • {(announcement.createdBy?.name || "User")} {(announcement.createdBy?.surname || "")}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -944,9 +1109,93 @@ export default function LearningClient({
               </div>
             )}
           </div>
+        ) : lessons.length === 0 && !hasNonLessonContent ? (
+          <div className="mx-auto max-w-2xl px-6 py-10 text-center text-gray-600">
+            <h3 className="text-lg font-semibold text-gray-800">No folder content yet</h3>
+            <p className="mt-2 text-sm">
+              Your facilitator has not added lesson content in this course folder yet.
+            </p>
+          </div>
+        ) : lessons.length === 0 ? (
+          <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+              <p className="text-sm font-semibold">No lesson folders yet for this course.</p>
+              <p className="mt-1 text-sm">
+                Other content created by your facilitator is available below.
+              </p>
+            </div>
+
+            {quiz && (
+              <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+                <h3 className="mb-2 font-semibold text-gray-900">Quiz</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowQuiz(true);
+                    initializeQuizAttempt();
+                  }}
+                  className="rounded-lg bg-purple-600 px-3 py-2 text-sm font-semibold text-white hover:bg-purple-700"
+                >
+                  Open {quiz.title}
+                </button>
+              </div>
+            )}
+
+            <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+              <h3 className="mb-3 font-semibold text-gray-900">Assignments</h3>
+              {assignments.length === 0 ? (
+                <p className="text-sm text-gray-500">No assignments available for this course yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {assignments.map((assignment) => (
+                    <div key={assignment._id} className="rounded-lg border border-gray-200 p-3">
+                      <p className="font-medium text-gray-900">{assignment.title}</p>
+                      {assignment.description && (
+                        <p className="mt-1 text-sm text-gray-600">{assignment.description}</p>
+                      )}
+                      {assignment.attachment?.url && (
+                        <a
+                          href={assignment.attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-block text-xs text-blue-600 hover:underline"
+                        >
+                          Assignment file: {assignment.attachment.name}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+              <h3 className="mb-3 font-semibold text-gray-900">Announcements</h3>
+              {announcements.length === 0 ? (
+                <p className="text-sm text-gray-500">No announcements yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {announcements.map((announcement) => (
+                    <div key={announcement._id} className="rounded-lg border border-gray-200 p-3">
+                      <p className="font-medium text-gray-900">{announcement.title}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{announcement.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            Select a lesson to start learning
+          <div className="mx-auto max-w-2xl px-6 py-10 text-center text-gray-600">
+            <h3 className="text-lg font-semibold text-gray-800">Select a lesson to start learning</h3>
+            <p className="mt-2 text-sm">Open the course menu and choose a lesson.</p>
+            <button
+              type="button"
+              onClick={() => setShowSidebar(true)}
+              className="mt-4 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Open course menu
+            </button>
           </div>
         )}
       </div>

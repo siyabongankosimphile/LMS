@@ -9,6 +9,7 @@ import Lesson from "@/models/Lesson";
 import Quiz from "@/models/Quiz";
 import Enrollment from "@/models/Enrollment";
 import Certificate from "@/models/Certificate";
+import Announcement from "@/models/Announcement";
 
 function hashKey(key: string): string {
   return crypto.createHash("sha256").update(key).digest("hex");
@@ -141,6 +142,7 @@ export async function DELETE(
       CourseModule.deleteMany({ course: id }),
       Lesson.deleteMany({ course: id }),
       Quiz.deleteMany({ course: id }),
+      Announcement.deleteMany({ course: id }),
       Enrollment.deleteMany({ course: id }),
       Certificate.deleteMany({ course: id }),
       Course.findByIdAndDelete(id),

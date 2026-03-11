@@ -40,6 +40,8 @@ export interface IQuiz extends Document {
     showCorrectAnswers: boolean;
     showFeedback: boolean;
   };
+  randomizeQuestions: boolean;
+  randomizeOptions: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -83,7 +85,16 @@ const QuizSchema = new Schema<IQuiz>(
     description: { type: String },
     passMarkPercent: { type: Number, default: 70 },
     openAt: { type: Date },
-    closeAt: { type: Date },
+    closeAt: {
+      type: Date,
+      validate: {
+        validator: function (this: IQuiz, value?: Date) {
+          if (!value || !this.openAt) return true;
+          return value.getTime() > this.openAt.getTime();
+        },
+        message: "closeAt must be later than openAt",
+      },
+    },
     timeLimitMinutes: { type: Number, min: 1 },
     gradeCategory: { type: String, default: "Quiz" },
     attemptsAllowed: { type: Number, min: 1, default: 1 },
@@ -93,6 +104,8 @@ const QuizSchema = new Schema<IQuiz>(
       showCorrectAnswers: { type: Boolean, default: false },
       showFeedback: { type: Boolean, default: true },
     },
+    randomizeQuestions: { type: Boolean, default: false },
+    randomizeOptions: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

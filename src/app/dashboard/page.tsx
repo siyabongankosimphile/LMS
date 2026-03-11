@@ -6,6 +6,9 @@ import Enrollment from "@/models/Enrollment";
 import Certificate from "@/models/Certificate";
 import Assignment from "@/models/Assignment";
 import AssignmentSubmission from "@/models/AssignmentSubmission";
+import Quiz from "@/models/Quiz";
+import Announcement from "@/models/Announcement";
+import DiscussionPost from "@/models/DiscussionPost";
 import "@/models/Course";
 import Link from "next/link";
 import DarkModeToggle from "@/components/DarkModeToggle";
@@ -68,6 +71,48 @@ export default async function DashboardPage() {
           assignment: { $in: assignmentIds },
           student: session.user.id,
         }).lean()
+      : [];
+
+  const [quizzes, announcements, gradedSubmissions, myDiscussionPosts] =
+    courseIds.length > 0
+      ? await Promise.all([
+          Quiz.find({ course: { $in: courseIds } })
+            .select("course title openAt closeAt")
+            .lean(),
+          Announcement.find({ course: { $in: courseIds } })
+            .select("course title message createdAt")
+            .sort({ createdAt: -1 })
+            .limit(40)
+            .lean(),
+          AssignmentSubmission.find({
+            course: { $in: courseIds },
+            student: session.user.id,
+            status: "GRADED",
+          })
+            .populate("assignment", "title")
+            .sort({ gradedAt: -1, updatedAt: -1 })
+            .limit(40)
+            .lean(),
+          DiscussionPost.find({
+            course: { $in: courseIds },
+            author: session.user.id,
+          })
+            .select("_id")
+            .lean(),
+        ])
+      : [[], [], [], []];
+
+  const myPostIds = myDiscussionPosts.map((post) => post._id);
+  const forumReplies =
+    myPostIds.length > 0
+      ? await DiscussionPost.find({
+          parentPost: { $in: myPostIds },
+          author: { $ne: session.user.id },
+        })
+          .populate("author", "name surname")
+          .sort({ createdAt: -1 })
+          .limit(40)
+          .lean()
       : [];
 
   const submissionsByAssignment = new Map(
@@ -138,9 +183,91 @@ export default async function DashboardPage() {
     };
   });
 
+  const courseTitleMap = new Map(courses.map((course) => [course.courseId, course.title]));
+
+  const quizTimeline = quizzes
+    .filter((quiz) => quiz.openAt)
+    .map((quiz) => ({
+      id: `quiz-open-${String(quiz._id)}`,
+      kind: "QUIZ_OPEN" as const,
+      courseId: String(quiz.course),
+      courseTitle: courseTitleMap.get(String(quiz.course)) || "Course",
+      title: `${quiz.title} opens`,
+      at: new Date(quiz.openAt as Date).toISOString(),
+      href: `/courses/${String(quiz.course)}/learn`,
+    }));
+
+  const announcementTimeline = announcements.map((item) => ({
+    id: `announcement-${String(item._id)}`,
+    kind: "ANNOUNCEMENT" as const,
+    courseId: String(item.course),
+    courseTitle: courseTitleMap.get(String(item.course)) || "Course",
+    title: item.title,
+    at: new Date(item.createdAt).toISOString(),
+    href: `/courses/${String(item.course)}/learn`,
+  }));
+
+  const deadlineTimeline = timeline.map((item) => ({
+    id: `deadline-${item.assignmentId}`,
+    kind: "ASSIGNMENT_DUE" as const,
+    courseId: item.courseId,
+    courseTitle: item.courseTitle,
+    title: item.assignmentTitle,
+    at: item.dueAt,
+    href: `/courses/${item.courseId}/learn`,
+    status: item.submissionStatus,
+  }));
+
+  const events = [...deadlineTimeline, ...quizTimeline, ...announcementTimeline]
+    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
+  const announcementNotifications = announcements.map((item) => ({
+    id: `note-announcement-${String(item._id)}`,
+    type: "ANNOUNCEMENT" as const,
+    title: item.title,
+    detail: item.message,
+    at: new Date(item.createdAt).toISOString(),
+    href: `/courses/${String(item.course)}/learn`,
+  }));
+
+  const forumNotifications = forumReplies.map((reply) => {
+    const author = reply.author as unknown as { name?: string; surname?: string };
+    return {
+      id: `note-reply-${String(reply._id)}`,
+      type: "FORUM_REPLY" as const,
+      title: "Forum reply",
+      detail: `${author?.name || "User"} ${author?.surname || ""}`.trim(),
+      at: new Date(reply.createdAt).toISOString(),
+      href: `/courses/${String(reply.course)}/forum`,
+    };
+  });
+
+  const gradingNotifications = gradedSubmissions.map((submission) => {
+    const assignment = submission.assignment as unknown as { title?: string };
+    return {
+      id: `note-graded-${String(submission._id)}`,
+      type: "GRADED" as const,
+      title: `Graded: ${assignment?.title || "Assignment"}`,
+      detail:
+        typeof submission.score === "number"
+          ? `Score ${submission.score}%`
+          : "Feedback available",
+      at: new Date(submission.gradedAt || submission.updatedAt).toISOString(),
+      href: `/courses/${String(submission.course)}/grades`,
+    };
+  });
+
+  const notifications = [
+    ...gradingNotifications,
+    ...forumNotifications,
+    ...announcementNotifications,
+  ]
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 40);
+
   return (
-    <div className="dashboard-theme max-w-7xl mx-auto px-4 py-8 text-gray-900 dark:text-gray-100">
-      <div className="mb-8 flex items-start justify-between gap-4">
+    <div className="dashboard-theme mx-auto w-full max-w-[1300px] px-3 py-5 text-gray-900 dark:text-gray-100 sm:px-4">
+      <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             Welcome back, {session.user.name}!
@@ -205,6 +332,8 @@ export default async function DashboardPage() {
           courses={courses}
           timeline={timeline}
           badges={badges}
+          events={events}
+          notifications={notifications}
         />
       )}
     </div>

@@ -57,6 +57,8 @@ interface Quiz {
     showCorrectAnswers?: boolean;
     showFeedback?: boolean;
   };
+  randomizeQuestions?: boolean;
+  randomizeOptions?: boolean;
 }
 
 interface Course {
@@ -138,7 +140,12 @@ export default function CourseEditor({
   const [newLessonTitle, setNewLessonTitle] = useState("");
   const [newLessonVideo, setNewLessonVideo] = useState("");
   const [newLessonContent, setNewLessonContent] = useState("");
-  const [newLessonSlideFile, setNewLessonSlideFile] = useState<File | null>(null);
+  const [newLessonSlideFiles, setNewLessonSlideFiles] = useState<File[]>([]);
+  const [newLessonResourceName, setNewLessonResourceName] = useState("");
+  const [newLessonResourceUrl, setNewLessonResourceUrl] = useState("");
+  const [newLessonUrlResources, setNewLessonUrlResources] = useState<
+    Array<{ name: string; type: "link"; url: string }>
+  >([]);
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [addingLesson, setAddingLesson] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
@@ -177,6 +184,12 @@ export default function CourseEditor({
     showCorrectAnswers: quiz?.reviewOptions?.showCorrectAnswers === true,
     showFeedback: quiz?.reviewOptions?.showFeedback !== false,
   });
+  const [quizRandomizeQuestions, setQuizRandomizeQuestions] = useState(
+    quiz?.randomizeQuestions === true
+  );
+  const [quizRandomizeOptions, setQuizRandomizeOptions] = useState(
+    quiz?.randomizeOptions === true
+  );
   const [questions, setQuestions] = useState<QuizQuestion[]>(
     (quiz?.questions || []).map((question) => ({
       ...question,
@@ -197,6 +210,14 @@ export default function CourseEditor({
   );
   const [savingQuiz, setSavingQuiz] = useState(false);
   const [quizMsg, setQuizMsg] = useState("");
+  const [showQuizForm, setShowQuizForm] = useState(!initialQuiz);
+
+  function normalizeResourceUrl(raw: string): string {
+    const value = raw.trim();
+    if (!value) return "";
+    if (/^(https?:|mailto:|tel:|\/)/i.test(value)) return value;
+    return `https://${value}`;
+  }
 
   async function saveOverview() {
     setSaving(true);
@@ -226,6 +247,7 @@ export default function CourseEditor({
       const data = await res.json();
       setCourse(data);
       setSaveMsg("Saved successfully!");
+      setActiveTab("content");
       setTimeout(() => setSaveMsg(""), 3000);
     }
   }
@@ -246,24 +268,32 @@ export default function CourseEditor({
       const data = await res.json();
       setModules((prev) => [...prev, data]);
       setNewModuleTitle("");
+      setSelectedModule(String(data._id));
+      setSaveMsg("Folder created. Add content in the opened section.");
+      setTimeout(() => setSaveMsg(""), 3000);
     }
   }
 
   async function addLesson() {
     if (!newLessonTitle.trim() || !selectedModule) return;
     setAddingLesson(true);
-    let slideResource:
-      | { name: string; type: "file" | "link"; url: string; key?: string }
-      | undefined;
+    const uploadedResources: Array<{
+      name: string;
+      type: "file" | "link";
+      url: string;
+      key?: string;
+    }> = [];
 
-    if (newLessonSlideFile) {
-      const uploaded = await uploadSlide(newLessonSlideFile);
+    for (const file of newLessonSlideFiles) {
+      const uploaded = await uploadSlide(file);
       if (!uploaded) {
         setAddingLesson(false);
         return;
       }
-      slideResource = uploaded;
+      uploadedResources.push(uploaded);
     }
+
+    const allResources = [...uploadedResources, ...newLessonUrlResources];
 
     const res = await fetch(
       `/api/facilitator/courses/${courseId}/modules/${selectedModule}/lessons`,
@@ -274,7 +304,7 @@ export default function CourseEditor({
           title: newLessonTitle,
           videoUrl: newLessonVideo || undefined,
           content: newLessonContent || undefined,
-          resources: slideResource ? [slideResource] : [],
+          resources: allResources,
           order: lessons.filter((l) => String(l.module) === String(selectedModule)).length,
         }),
       }
@@ -286,7 +316,13 @@ export default function CourseEditor({
       setNewLessonTitle("");
       setNewLessonVideo("");
       setNewLessonContent("");
-      setNewLessonSlideFile(null);
+      setNewLessonSlideFiles([]);
+      setNewLessonResourceName("");
+      setNewLessonResourceUrl("");
+      setNewLessonUrlResources([]);
+      setSelectedModule(null);
+      setSaveMsg("Folder content added successfully.");
+      setTimeout(() => setSaveMsg(""), 3000);
     }
   }
 
@@ -332,6 +368,15 @@ export default function CourseEditor({
     setEditLessonResources((prev) => [...prev, uploaded]);
   }
 
+  function addUrlResourceToNewLesson() {
+    const url = normalizeResourceUrl(newLessonResourceUrl);
+    const name = newLessonResourceName.trim() || "External link";
+    if (!url) return;
+    setNewLessonUrlResources((prev) => [...prev, { name, type: "link", url }]);
+    setNewLessonResourceName("");
+    setNewLessonResourceUrl("");
+  }
+
   async function saveEditedLesson(moduleId: string, lessonId: string) {
     setEditingLesson(true);
     const res = await fetch(
@@ -355,6 +400,8 @@ export default function CourseEditor({
         prev.map((lesson) => (lesson._id === lessonId ? updated : lesson))
       );
       cancelEditLesson();
+      setSaveMsg("Folder content updated successfully.");
+      setTimeout(() => setSaveMsg(""), 3000);
     }
   }
 
@@ -519,6 +566,14 @@ export default function CourseEditor({
       };
     });
 
+    const openDate = quizOpenAt ? new Date(quizOpenAt) : null;
+    const closeDate = quizCloseAt ? new Date(quizCloseAt) : null;
+    if (openDate && closeDate && closeDate <= openDate) {
+      setSavingQuiz(false);
+      setQuizMsg("closeAt must be later than openAt");
+      return;
+    }
+
     const res = await fetch(
       `/api/facilitator/courses/${courseId}/quizzes`,
       {
@@ -536,6 +591,8 @@ export default function CourseEditor({
           passMarkPercent: quizPassMark,
           questionsPerPage: quizQuestionsPerPage,
           reviewOptions: quizReviewOptions,
+          randomizeQuestions: quizRandomizeQuestions,
+          randomizeOptions: quizRandomizeOptions,
         }),
       }
     );
@@ -543,7 +600,9 @@ export default function CourseEditor({
     if (res.ok) {
       const data = await res.json();
       setQuiz(data);
-      setQuizMsg("Quiz saved!");
+      setShowQuizForm(false);
+      setQuizMsg("Quiz saved. Returning to overview for your next step.");
+      setActiveTab("overview");
       setTimeout(() => setQuizMsg(""), 3000);
       return;
     }
@@ -598,7 +657,7 @@ export default function CourseEditor({
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              {tab}
+              {tab === "content" ? "folder content" : tab === "quiz" ? "quiz (outside folder)" : tab}
             </button>
           ))}
         </div>
@@ -810,14 +869,14 @@ export default function CourseEditor({
         <div className="space-y-6">
           {/* Add module */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Add Module</h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Add Folder</h3>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={newModuleTitle}
                 onChange={(e) => setNewModuleTitle(e.target.value)}
                 className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Module title"
+                placeholder="Folder title"
               />
               <button
                 onClick={addModule}
@@ -836,7 +895,7 @@ export default function CourseEditor({
               className="bg-white rounded-xl border border-gray-100 overflow-hidden"
             >
               <div className="bg-gray-50 px-5 py-3 font-medium text-gray-800 flex items-center justify-between">
-                <span>{m.title}</span>
+                <span>Folder: {m.title}</span>
                 <button
                   onClick={() =>
                     setSelectedModule(
@@ -845,7 +904,7 @@ export default function CourseEditor({
                   }
                   className="text-blue-600 text-xs font-medium hover:underline"
                 >
-                  {selectedModule === m._id ? "Cancel" : "+ Add Lesson"}
+                  {selectedModule === m._id ? "Cancel" : "+ Add Folder Content"}
                 </button>
               </div>
 
@@ -883,15 +942,18 @@ export default function CourseEditor({
                           />
                           <div>
                             <label className="block text-xs text-gray-500 mb-1">
-                              Upload slide (PPT/PDF)
+                              Upload files (multiple)
                             </label>
                             <input
                               type="file"
-                              accept=".ppt,.pptx,.pdf"
+                              accept=".ppt,.pptx,.pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp,.zip"
+                              multiple
                               onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  addSlideToEditingLesson(file);
+                                const files = Array.from(e.target.files || []);
+                                if (files.length > 0) {
+                                  files.forEach((file) => {
+                                    addSlideToEditingLesson(file);
+                                  });
                                   e.currentTarget.value = "";
                                 }
                               }}
@@ -950,7 +1012,7 @@ export default function CourseEditor({
                               <div className="font-medium">{l.title}</div>
                               {l.videoUrl && (
                                 <div className="text-xs text-gray-400 mt-0.5">
-                                  🎬 Video: {l.videoUrl}
+                                  Video: {l.videoUrl}
                                 </div>
                               )}
                               {l.content && (
@@ -960,7 +1022,7 @@ export default function CourseEditor({
                               )}
                               {(l.resources || []).length > 0 && (
                                 <div className="text-xs text-blue-600 mt-1">
-                                  📎 {(l.resources || []).length} resource(s)
+                                  {(l.resources || []).length} resource(s)
                                 </div>
                               )}
                             </div>
@@ -980,9 +1042,7 @@ export default function CourseEditor({
               {/* Add lesson form */}
               {selectedModule === m._id && (
                 <div className="border-t border-gray-100 p-5 bg-blue-50 space-y-3">
-                  <h4 className="text-sm font-semibold text-gray-700">
-                    New Lesson
-                  </h4>
+                  <h4 className="text-sm font-semibold text-gray-700">New Folder Content</h4>
                   <input
                     type="text"
                     value={newLessonTitle}
@@ -1006,21 +1066,69 @@ export default function CourseEditor({
                   />
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">
-                      Upload slide (PPT/PDF) (optional)
+                      Upload files (optional, multiple)
                     </label>
                     <input
                       type="file"
-                      accept=".ppt,.pptx,.pdf"
-                      onChange={(e) => setNewLessonSlideFile(e.target.files?.[0] || null)}
+                      accept=".ppt,.pptx,.pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp,.zip"
+                      multiple
+                      onChange={(e) => setNewLessonSlideFiles(Array.from(e.target.files || []))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                     />
+                    {newLessonSlideFiles.length > 0 && (
+                      <p className="mt-1 text-xs text-gray-500">{newLessonSlideFiles.length} file(s) selected</p>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
+                    <label className="block text-xs text-gray-500">Add URL resource</label>
+                    <input
+                      type="text"
+                      value={newLessonResourceName}
+                      onChange={(e) => setNewLessonResourceName(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      placeholder="Resource name (optional)"
+                    />
+                    <input
+                      type="url"
+                      value={newLessonResourceUrl}
+                      onChange={(e) => setNewLessonResourceUrl(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      placeholder="https://example.com"
+                    />
+                    <button
+                      type="button"
+                      onClick={addUrlResourceToNewLesson}
+                      className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                    >
+                      Add URL
+                    </button>
+                    {newLessonUrlResources.length > 0 && (
+                      <div className="space-y-1">
+                        {newLessonUrlResources.map((resource, idx) => (
+                          <div key={`${resource.url}-${idx}`} className="flex items-center justify-between text-xs">
+                            <a href={resource.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              {resource.name}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewLessonUrlResources((prev) => prev.filter((_, index) => index !== idx))
+                              }
+                              className="text-red-500 hover:underline"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={addLesson}
                     disabled={addingLesson || !newLessonTitle.trim()}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
                   >
-                    {addingLesson ? "Adding..." : "Add Lesson"}
+                    {addingLesson ? "Adding..." : "Add Folder Content"}
                   </button>
                 </div>
               )}
@@ -1038,7 +1146,23 @@ export default function CourseEditor({
       {/* Quiz tab */}
       {activeTab === "quiz" && (
         <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
-          <h3 className="font-semibold text-gray-900">Course Quiz</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-gray-900">Course Quiz (outside folder)</h3>
+            <button
+              type="button"
+              onClick={() => setShowQuizForm((prev) => !prev)}
+              className="text-xs font-semibold text-blue-600 hover:underline"
+            >
+              {showQuizForm ? "Close form" : quiz ? "Edit quiz" : "Create quiz"}
+            </button>
+          </div>
+          {!showQuizForm && (
+            <p className="text-sm text-gray-500">
+              Quiz form closed. Use &quot;{quiz ? "Edit quiz" : "Create quiz"}&quot; to continue.
+            </p>
+          )}
+          {showQuizForm && (
+            <>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Quiz Title
@@ -1198,6 +1322,30 @@ export default function CourseEditor({
                   }
                 />
                 Show feedback
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <p className="block text-sm font-medium text-gray-700 mb-2">
+              Randomization
+            </p>
+            <div className="flex flex-wrap gap-5">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={quizRandomizeQuestions}
+                  onChange={(e) => setQuizRandomizeQuestions(e.target.checked)}
+                />
+                Randomize question order
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={quizRandomizeOptions}
+                  onChange={(e) => setQuizRandomizeOptions(e.target.checked)}
+                />
+                Randomize multiple-choice options
               </label>
             </div>
           </div>
@@ -1483,7 +1631,7 @@ export default function CourseEditor({
               disabled={savingQuiz || !quizTitle || questions.length === 0}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {savingQuiz ? "Saving..." : "Save and display"}
+              {savingQuiz ? "Saving..." : "Save quiz"}
             </button>
             {quizMsg && (
               <span
@@ -1497,6 +1645,8 @@ export default function CourseEditor({
               </span>
             )}
           </div>
+            </>
+          )}
         </div>
       )}
     </div>

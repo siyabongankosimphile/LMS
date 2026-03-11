@@ -45,6 +45,19 @@ export async function POST(
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
+    const dueAtMs = assignment.dueAt ? new Date(assignment.dueAt).getTime() : null;
+    if (
+      dueAtMs &&
+      Number.isFinite(dueAtMs) &&
+      Date.now() > dueAtMs &&
+      assignment.allowLateSubmissions === false
+    ) {
+      return NextResponse.json(
+        { error: "Late submissions are disabled for this assignment" },
+        { status: 400 }
+      );
+    }
+
     const enrollment = await Enrollment.findOne({
       student: session.user.id,
       course: assignment.course,
