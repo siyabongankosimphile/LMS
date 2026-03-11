@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface ICertificate extends Document {
   _id: mongoose.Types.ObjectId;
+  certificateId: string;
   student: mongoose.Types.ObjectId;
   course: mongoose.Types.ObjectId;
   enrollment: mongoose.Types.ObjectId;
@@ -12,6 +13,7 @@ export interface ICertificate extends Document {
 
 const CertificateSchema = new Schema<ICertificate>(
   {
+    certificateId: { type: String, required: true, unique: true, index: true },
     student: { type: Schema.Types.ObjectId, ref: "User", required: true },
     course: { type: Schema.Types.ObjectId, ref: "Course", required: true },
     enrollment: {
@@ -28,6 +30,7 @@ const CertificateSchema = new Schema<ICertificate>(
 
 CertificateSchema.index({ student: 1, issuedAt: -1 });
 CertificateSchema.index({ course: 1 });
+CertificateSchema.index({ certificateId: 1 }, { unique: true });
 
 const Certificate: Model<ICertificate> =
   mongoose.models.Certificate ||

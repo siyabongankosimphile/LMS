@@ -9,7 +9,21 @@ import Certificate from "@/models/Certificate";
 import Course from "@/models/Course";
 import User from "@/models/User";
 import { generateCertificatePDF } from "@/lib/certificate";
+import { buildCertificateVerificationUrl } from "@/lib/certificateVerification";
 import { uploadFile } from "@/lib/s3";
+
+async function generateUniqueCertificateId() {
+  const year = new Date().getFullYear();
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const serial = String(Math.floor(1000 + Math.random() * 9000));
+    const certificateId = `IS-${year}-${serial}`;
+    const exists = await Certificate.exists({ certificateId });
+    if (!exists) return certificateId;
+  }
+
+  return `IS-${year}-${Date.now().toString().slice(-4)}`;
+}
 
 export async function POST(
   req: NextRequest,
@@ -240,7 +254,8 @@ export async function POST(
       enrollment.completedAt = new Date();
 
       // Generate certificate
-      await issueCertificate(enrollment, session.user.id, courseId);
+      const origin = new URL(req.url).origin;
+      await issueCertificate(enrollment, session.user.id, courseId, origin);
     }
 
     await enrollment.save();
@@ -266,7 +281,8 @@ export async function POST(
 async function issueCertificate(
   enrollment: InstanceType<typeof Enrollment>,
   studentId: string,
-  courseId: string
+  courseId: string,
+  origin: string
 ) {
   try {
     const existing = await Certificate.findOne({
@@ -282,8 +298,18 @@ async function issueCertificate(
 
     if (!student || !course) return;
 
+    const certificateId = await generateUniqueCertificateId();
+    const verificationUrl = buildCertificateVerificationUrl({
+      origin,
+      certificateId,
+    });
+
     const pdfBuffer = await generateCertificatePDF({
       studentName: student.name,
+      studentSurname: student.surname,
+      studentIdNumber: student.saId,
+      certificateId,
+      verificationUrl,
       courseName: course.title,
       completionDate: enrollment.completedAt || new Date(),
     });
@@ -298,6 +324,7 @@ async function issueCertificate(
     }
 
     await Certificate.create({
+      certificateId,
       student: studentId,
       course: courseId,
       enrollment: enrollment._id,

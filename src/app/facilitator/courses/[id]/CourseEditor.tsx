@@ -93,6 +93,14 @@ export default function CourseEditor({
   quiz: initialQuiz,
 }: Props) {
   const router = useRouter();
+  const toLocalDateTimeInput = (value?: string | Date) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  };
+
   const [activeTab, setActiveTab] = useState<"overview" | "content" | "quiz">(
     "overview"
   );
@@ -161,10 +169,10 @@ export default function CourseEditor({
   const [quizTitle, setQuizTitle] = useState(quiz?.title || "");
   const [quizDescription, setQuizDescription] = useState(quiz?.description || "");
   const [quizOpenAt, setQuizOpenAt] = useState(
-    quiz?.openAt ? new Date(quiz.openAt).toISOString().slice(0, 16) : ""
+    toLocalDateTimeInput(quiz?.openAt)
   );
   const [quizCloseAt, setQuizCloseAt] = useState(
-    quiz?.closeAt ? new Date(quiz.closeAt).toISOString().slice(0, 16) : ""
+    toLocalDateTimeInput(quiz?.closeAt)
   );
   const [quizTimeLimitMinutes, setQuizTimeLimitMinutes] = useState(
     quiz?.timeLimitMinutes || 30
@@ -1210,7 +1218,14 @@ export default function CourseEditor({
               <input
                 type="datetime-local"
                 value={quizOpenAt}
-                onChange={(e) => setQuizOpenAt(e.target.value)}
+                onChange={(e) => {
+                  const nextOpenAt = e.target.value;
+                  setQuizOpenAt(nextOpenAt);
+                  if (quizCloseAt && nextOpenAt && quizCloseAt <= nextOpenAt) {
+                    setQuizCloseAt("");
+                    setQuizMsg("Close quiz time was cleared. Pick a time after Open quiz.");
+                  }
+                }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               />
             </div>
@@ -1221,7 +1236,15 @@ export default function CourseEditor({
               <input
                 type="datetime-local"
                 value={quizCloseAt}
-                onChange={(e) => setQuizCloseAt(e.target.value)}
+                min={quizOpenAt || undefined}
+                onChange={(e) => {
+                  const nextCloseAt = e.target.value;
+                  if (quizOpenAt && nextCloseAt && nextCloseAt <= quizOpenAt) {
+                    setQuizMsg("Close quiz must be later than Open quiz.");
+                    return;
+                  }
+                  setQuizCloseAt(nextCloseAt);
+                }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               />
             </div>
