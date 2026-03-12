@@ -13,6 +13,62 @@ function escapeCsv(value: string | number) {
   return text;
 }
 
+function formatExcelText(value: string | number | null | undefined) {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return "";
+  }
+
+  const looksNumeric = /^[0-9+\-() ]+$/.test(text);
+  if (looksNumeric) {
+    return `="${text.replace(/"/g, '""')}"`;
+  }
+
+  return text;
+}
+
+function toValidDate(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  if (value && typeof value === "object" && "$date" in value) {
+    const maybeDate = (value as { $date?: unknown }).$date;
+    if (typeof maybeDate === "string" || typeof maybeDate === "number") {
+      const parsed = new Date(maybeDate);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+  }
+
+  return null;
+}
+
+function formatJoinedDate(value: unknown) {
+  const date = toValidDate(value);
+  if (!date) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}-${day}-${year}`;
+}
+
+function getJoinedDateExportValue(value: unknown) {
+  const formatted = formatJoinedDate(value);
+  if (!formatted) {
+    return "";
+  }
+
+  return `="${formatted}"`;
+}
+
 export async function GET(_req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -102,20 +158,22 @@ export async function GET(_req: NextRequest) {
         student.highestQualification || "",
         student.province || "",
         student.age || "",
-        student.phone || "",
-        student.saId || "",
+        formatExcelText(student.phone || ""),
+        formatExcelText(student.saId || ""),
         student.status,
         summary.enrolledCourses,
         summary.completedCourses,
         inProgressCourses,
         summary.averageProgress,
-        new Date(student.createdAt).toLocaleDateString("en-ZA"),
+        getJoinedDateExportValue(student.createdAt),
       ];
     });
 
-    const csv = [header, ...rows]
+    const csvBody = [header, ...rows]
       .map((line) => line.map(escapeCsv).join(","))
       .join("\n");
+
+    const csv = `\uFEFFsep=,\n${csvBody}`;
 
     return new NextResponse(csv, {
       status: 200,
