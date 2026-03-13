@@ -71,6 +71,7 @@ export async function PATCH(
       shortName,
       category,
       description,
+      welcomeMessage,
       enrollmentKey,
       passMarkPercent,
       published,
@@ -85,6 +86,12 @@ export async function PATCH(
     if (shortName !== undefined) course.shortName = shortName;
     if (category !== undefined) course.category = category;
     if (description) course.description = description;
+    if (welcomeMessage !== undefined) {
+      course.welcomeMessage =
+        typeof welcomeMessage === "string" && welcomeMessage.trim()
+          ? welcomeMessage.trim()
+          : undefined;
+    }
     if (enrollmentKey) course.enrollmentKeyHash = hashKey(enrollmentKey);
     if (passMarkPercent !== undefined) course.passMarkPercent = passMarkPercent;
     if (published !== undefined) course.published = published;

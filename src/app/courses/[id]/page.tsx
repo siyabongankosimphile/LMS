@@ -196,6 +196,7 @@ export default async function CourseDetailPage({ params }: Props) {
         courseId={id}
         courseTitle={course.title}
         courseDescription={course.description}
+        welcomeMessage={course.welcomeMessage}
         courseImage={course.thumbnail}
         facilitatorName={facilitator?.name || "Facilitator"}
         courseFormat={course.format || "WEEKLY"}
@@ -253,6 +254,12 @@ export default async function CourseDetailPage({ params }: Props) {
       <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-8 text-white mb-8">
         <h1 className="text-3xl font-bold mb-3">{course.title}</h1>
         <p className="text-blue-100 mb-4">{course.description}</p>
+        {course.welcomeMessage && (
+          <div className="mb-4 rounded-xl border border-blue-300/40 bg-white/10 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">Welcome Message</p>
+            <p className="mt-1 text-sm text-blue-50 whitespace-pre-wrap">{course.welcomeMessage}</p>
+          </div>
+        )}
         <div className="flex items-center gap-4 text-sm text-blue-200">
           <span>👨‍🏫 {facilitator?.name || "Facilitator"}</span>
           <span>📚 {totalLessons} lessons</span>

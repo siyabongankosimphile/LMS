@@ -7,6 +7,7 @@ export interface ICourse extends Document {
   shortName?: string;
   category?: string;
   description: string;
+  welcomeMessage?: string;
   facilitator: mongoose.Types.ObjectId;
   enrollmentKeyHash: string;
   thumbnail?: string;
@@ -30,6 +31,7 @@ const CourseSchema = new Schema<ICourse>(
     shortName: { type: String, trim: true },
     category: { type: String, trim: true },
     description: { type: String, required: true },
+    welcomeMessage: { type: String, trim: true },
     facilitator: { type: Schema.Types.ObjectId, ref: "User", required: true },
     enrollmentKeyHash: { type: String, required: true },
     thumbnail: { type: String },

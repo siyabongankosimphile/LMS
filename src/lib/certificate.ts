@@ -20,19 +20,24 @@ export async function generateCertificatePDF(params: {
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
+  const greenDark: [number, number, number] = [22, 101, 52];
+  const greenMid: [number, number, number] = [34, 139, 87];
+  const greenLight: [number, number, number] = [220, 252, 231];
+  const black: [number, number, number] = [17, 24, 39];
+  const slate: [number, number, number] = [71, 85, 105];
 
   // Background
-  doc.setFillColor(245, 247, 255);
+  doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, pageWidth, pageHeight, "F");
 
   // Border
-  doc.setDrawColor(37, 99, 235);
+  doc.setDrawColor(...greenDark);
   doc.setLineWidth(4);
   doc.rect(20, 20, pageWidth - 40, pageHeight - 40);
 
   // Inner border
   doc.setLineWidth(1);
-  doc.setDrawColor(147, 197, 253);
+  doc.setDrawColor(...greenMid);
   doc.rect(28, 28, pageWidth - 56, pageHeight - 56);
 
   // Brand logo (prefers logo_white_not in public)
@@ -52,19 +57,31 @@ export async function generateCertificatePDF(params: {
   }
 
   if (logoImage) {
-    doc.addImage(logoImage, logoFormat, 42, pageHeight - 86, 118, 42);
+    // Strong contrast badge so the white logo stays visible on light certificate backgrounds.
+    const badgeX = 42;
+    const badgeY = 42;
+    const badgeWidth = 220;
+    const badgeHeight = 82;
+    doc.setFillColor(...black);
+    doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 12, 12, "F");
+
+    doc.setDrawColor(...greenLight);
+    doc.setLineWidth(1.2);
+    doc.roundedRect(badgeX + 2, badgeY + 2, badgeWidth - 4, badgeHeight - 4, 10, 10, "S");
+
+    doc.addImage(logoImage, logoFormat, badgeX + 22, badgeY + 19, 176, 44);
   }
 
   // Brand text
   doc.setFont("helvetica", "bold");
   doc.setFontSize(24);
-  doc.setTextColor(37, 99, 235);
+  doc.setTextColor(...greenDark);
   doc.text("KAYISE IT", pageWidth / 2, 100, { align: "center" });
 
   // Certificate title
   doc.setFont("helvetica", "bold");
   doc.setFontSize(36);
-  doc.setTextColor(30, 41, 59);
+  doc.setTextColor(...black);
   doc.text("CERTIFICATE OF COMPLETION", pageWidth / 2, 160, {
     align: "center",
   });
@@ -72,7 +89,7 @@ export async function generateCertificatePDF(params: {
   // Subtitle
   doc.setFont("helvetica", "normal");
   doc.setFontSize(14);
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(...slate);
   doc.text("This is to certify that", pageWidth / 2, 196, { align: "center" });
 
   const fullName = `${params.studentName} ${params.studentSurname || ""}`.trim();
@@ -80,12 +97,12 @@ export async function generateCertificatePDF(params: {
   // Student full name
   doc.setFont("helvetica", "bold");
   doc.setFontSize(30);
-  doc.setTextColor(37, 99, 235);
+  doc.setTextColor(...greenDark);
   doc.text(fullName, pageWidth / 2, 238, { align: "center" });
 
   // Underline
   const nameWidth = doc.getTextWidth(fullName);
-  doc.setDrawColor(37, 99, 235);
+  doc.setDrawColor(...greenMid);
   doc.setLineWidth(1.5);
   doc.line(
     pageWidth / 2 - nameWidth / 2,
@@ -96,13 +113,13 @@ export async function generateCertificatePDF(params: {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(12);
-  doc.setTextColor(51, 65, 85);
+  doc.setTextColor(...black);
   doc.text(`ID Number: ${params.studentIdNumber || "N/A"}`, pageWidth / 2, 276, { align: "center" });
 
   // Course completion text
   doc.setFont("helvetica", "normal");
   doc.setFontSize(14);
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(...slate);
   doc.text(
     "has successfully completed the course",
     pageWidth / 2,
@@ -113,7 +130,7 @@ export async function generateCertificatePDF(params: {
   // Course name
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
-  doc.setTextColor(30, 41, 59);
+  doc.setTextColor(...black);
   doc.text(`"${params.courseName}"`, pageWidth / 2, 350, { align: "center" });
 
   // Date
@@ -124,7 +141,7 @@ export async function generateCertificatePDF(params: {
   });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(12);
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(...slate);
   doc.text(`Completed on: ${dateStr}`, pageWidth / 2, 388, {
     align: "center",
   });
@@ -132,7 +149,7 @@ export async function generateCertificatePDF(params: {
   // Certificate verification metadata
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.setTextColor(51, 65, 85);
+  doc.setTextColor(...black);
   doc.text(`Certificate ID: ${params.certificateId}`, 42, pageHeight - 102);
 
   // Signature authority block
@@ -140,14 +157,14 @@ export async function generateCertificatePDF(params: {
   const leftSigX = pageWidth / 2 - 170;
   const rightSigX = pageWidth / 2 + 30;
 
-  doc.setDrawColor(100, 116, 139);
+  doc.setDrawColor(...greenMid);
   doc.setLineWidth(1);
   doc.line(leftSigX, signatureY, leftSigX + 140, signatureY);
   doc.line(rightSigX, signatureY, rightSigX + 140, signatureY);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(...slate);
   doc.text("Lead Instructor", leftSigX + 70, signatureY + 14, { align: "center" });
   doc.text("Head of Department / CEO", rightSigX + 70, signatureY + 14, { align: "center" });
 
@@ -158,12 +175,12 @@ export async function generateCertificatePDF(params: {
   });
   doc.addImage(qrDataUrl, "PNG", pageWidth - 118, pageHeight - 118, 76, 76);
   doc.setFontSize(8);
-  doc.setTextColor(100, 116, 139);
+  doc.setTextColor(...slate);
   doc.text("Scan to verify", pageWidth - 80, pageHeight - 34, { align: "center" });
 
   // Footer
   doc.setFontSize(10);
-  doc.setTextColor(148, 163, 184);
+  doc.setTextColor(...greenDark);
   doc.text(
     "Kayise IT | Empowering Learners through Technology",
     pageWidth / 2,

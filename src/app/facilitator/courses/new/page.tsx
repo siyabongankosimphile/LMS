@@ -9,6 +9,7 @@ export default function NewCoursePage() {
   const [shortName, setShortName] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [welcomeMessage, setWelcomeMessage] = useState("");
   const [enrollmentKey, setEnrollmentKey] = useState("");
   const [passMarkPercent, setPassMarkPercent] = useState(70);
   const [startDate, setStartDate] = useState("");
@@ -35,6 +36,7 @@ export default function NewCoursePage() {
           shortName,
           category,
           description,
+          welcomeMessage,
           enrollmentKey,
           passMarkPercent,
           startDate: startDate || undefined,
@@ -118,6 +120,19 @@ export default function NewCoursePage() {
             rows={4}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             placeholder="Describe what students will learn..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Welcome Message
+          </label>
+          <textarea
+            value={welcomeMessage}
+            onChange={(e) => setWelcomeMessage(e.target.value)}
+            rows={3}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            placeholder="Write a message to greet students when they enter this course..."
           />
         </div>
 

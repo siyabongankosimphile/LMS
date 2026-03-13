@@ -67,6 +67,7 @@ interface Course {
   shortName?: string;
   category?: string;
   description: string;
+  welcomeMessage?: string;
   startDate?: string;
   endDate?: string;
   format?: "TOPICS" | "WEEKLY" | "GRID";
@@ -114,6 +115,7 @@ export default function CourseEditor({
   const [shortName, setShortName] = useState(course.shortName || "");
   const [category, setCategory] = useState(course.category || "");
   const [description, setDescription] = useState(course.description);
+  const [welcomeMessage, setWelcomeMessage] = useState(course.welcomeMessage || "");
   const [startDate, setStartDate] = useState(
     course.startDate ? new Date(course.startDate).toISOString().slice(0, 10) : ""
   );
@@ -146,7 +148,7 @@ export default function CourseEditor({
   const [newModuleTitle, setNewModuleTitle] = useState("");
   const [addingModule, setAddingModule] = useState(false);
   const [newLessonTitle, setNewLessonTitle] = useState("");
-  const [newLessonVideo, setNewLessonVideo] = useState("");
+  const [newLessonVideoFile, setNewLessonVideoFile] = useState<File | null>(null);
   const [newLessonContent, setNewLessonContent] = useState("");
   const [newLessonSlideFiles, setNewLessonSlideFiles] = useState<File[]>([]);
   const [newLessonResourceName, setNewLessonResourceName] = useState("");
@@ -158,7 +160,8 @@ export default function CourseEditor({
   const [addingLesson, setAddingLesson] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [editLessonTitle, setEditLessonTitle] = useState("");
-  const [editLessonVideo, setEditLessonVideo] = useState("");
+  const [editLessonVideoUrl, setEditLessonVideoUrl] = useState("");
+  const [editLessonVideoFile, setEditLessonVideoFile] = useState<File | null>(null);
   const [editLessonContent, setEditLessonContent] = useState("");
   const [editLessonResources, setEditLessonResources] = useState<
     Array<{ name: string; type: "file" | "link"; url: string; key?: string }>
@@ -235,6 +238,7 @@ export default function CourseEditor({
       shortName,
       category,
       description,
+      welcomeMessage,
       startDate: startDate || null,
       endDate: endDate || null,
       format: courseFormat,
@@ -285,6 +289,17 @@ export default function CourseEditor({
   async function addLesson() {
     if (!newLessonTitle.trim() || !selectedModule) return;
     setAddingLesson(true);
+    let videoUrl: string | undefined;
+
+    if (newLessonVideoFile) {
+      const uploadedVideo = await uploadVideo(newLessonVideoFile);
+      if (!uploadedVideo) {
+        setAddingLesson(false);
+        return;
+      }
+      videoUrl = uploadedVideo.url;
+    }
+
     const uploadedResources: Array<{
       name: string;
       type: "file" | "link";
@@ -310,7 +325,7 @@ export default function CourseEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: newLessonTitle,
-          videoUrl: newLessonVideo || undefined,
+          videoUrl,
           content: newLessonContent || undefined,
           resources: allResources,
           order: lessons.filter((l) => String(l.module) === String(selectedModule)).length,
@@ -322,7 +337,7 @@ export default function CourseEditor({
       const data = await res.json();
       setLessons((prev) => [...prev, data]);
       setNewLessonTitle("");
-      setNewLessonVideo("");
+      setNewLessonVideoFile(null);
       setNewLessonContent("");
       setNewLessonSlideFiles([]);
       setNewLessonResourceName("");
@@ -354,10 +369,30 @@ export default function CourseEditor({
     };
   }
 
+  async function uploadVideo(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("context", "videos");
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      name: data.name,
+      url: data.url,
+      key: data.key,
+    };
+  }
+
   function startEditLesson(lesson: Lesson) {
     setEditingLessonId(lesson._id);
     setEditLessonTitle(lesson.title);
-    setEditLessonVideo(lesson.videoUrl || "");
+    setEditLessonVideoUrl(lesson.videoUrl || "");
+    setEditLessonVideoFile(null);
     setEditLessonContent(lesson.content || "");
     setEditLessonResources(lesson.resources || []);
   }
@@ -365,7 +400,8 @@ export default function CourseEditor({
   function cancelEditLesson() {
     setEditingLessonId(null);
     setEditLessonTitle("");
-    setEditLessonVideo("");
+    setEditLessonVideoUrl("");
+    setEditLessonVideoFile(null);
     setEditLessonContent("");
     setEditLessonResources([]);
   }
@@ -387,6 +423,17 @@ export default function CourseEditor({
 
   async function saveEditedLesson(moduleId: string, lessonId: string) {
     setEditingLesson(true);
+    let videoUrl: string | null = editLessonVideoUrl || null;
+
+    if (editLessonVideoFile) {
+      const uploadedVideo = await uploadVideo(editLessonVideoFile);
+      if (!uploadedVideo) {
+        setEditingLesson(false);
+        return;
+      }
+      videoUrl = uploadedVideo.url;
+    }
+
     const res = await fetch(
       `/api/facilitator/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`,
       {
@@ -394,7 +441,7 @@ export default function CourseEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: editLessonTitle,
-          videoUrl: editLessonVideo || null,
+          videoUrl,
           content: editLessonContent || null,
           resources: editLessonResources,
         }),
@@ -712,6 +759,16 @@ export default function CourseEditor({
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Welcome Message</label>
+            <textarea
+              value={welcomeMessage}
+              onChange={(e) => setWelcomeMessage(e.target.value)}
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              placeholder="Message shown to students when they enter the course"
+            />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
@@ -935,12 +992,39 @@ export default function CourseEditor({
                             placeholder="Lesson title"
                           />
                           <input
-                            type="url"
-                            value={editLessonVideo}
-                            onChange={(e) => setEditLessonVideo(e.target.value)}
+                            type="file"
+                            accept="video/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null;
+                              setEditLessonVideoFile(file);
+                            }}
                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Video URL (optional)"
                           />
+                          <div className="text-xs text-gray-500 space-y-1">
+                            {editLessonVideoFile ? (
+                              <p>Selected video: {editLessonVideoFile.name}</p>
+                            ) : editLessonVideoUrl ? (
+                              <>
+                                <a
+                                  href={editLessonVideoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  Current video file
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditLessonVideoUrl("")}
+                                  className="ml-3 text-red-500 hover:underline"
+                                >
+                                  Remove video
+                                </button>
+                              </>
+                            ) : (
+                              <p>No video uploaded</p>
+                            )}
+                          </div>
                           <textarea
                             value={editLessonContent}
                             onChange={(e) => setEditLessonContent(e.target.value)}
@@ -1020,7 +1104,7 @@ export default function CourseEditor({
                               <div className="font-medium">{l.title}</div>
                               {l.videoUrl && (
                                 <div className="text-xs text-gray-400 mt-0.5">
-                                  Video: {l.videoUrl}
+                                  Video file attached
                                 </div>
                               )}
                               {l.content && (
@@ -1059,12 +1143,14 @@ export default function CourseEditor({
                     placeholder="Lesson title"
                   />
                   <input
-                    type="url"
-                    value={newLessonVideo}
-                    onChange={(e) => setNewLessonVideo(e.target.value)}
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) => setNewLessonVideoFile(e.target.files?.[0] || null)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Video URL (optional)"
                   />
+                  {newLessonVideoFile && (
+                    <p className="text-xs text-gray-500">Selected video: {newLessonVideoFile.name}</p>
+                  )}
                   <textarea
                     value={newLessonContent}
                     onChange={(e) => setNewLessonContent(e.target.value)}

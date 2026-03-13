@@ -62,6 +62,7 @@ type Props = {
   courseId: string;
   courseTitle: string;
   courseDescription: string;
+  welcomeMessage?: string;
   courseImage?: string;
   facilitatorName: string;
   courseFormat?: "TOPICS" | "WEEKLY" | "GRID";
@@ -126,6 +127,7 @@ export default function CourseStudentView({
   courseId,
   courseTitle,
   courseDescription,
+  welcomeMessage,
   courseImage,
   facilitatorName,
   courseFormat = "WEEKLY",
@@ -141,7 +143,8 @@ export default function CourseStudentView({
   recentActivity,
   participants,
 }: Props) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [desktopDrawerOpen, setDesktopDrawerOpen] = useState(true);
   const [activeSection, setActiveSection] = useState<string>("announcements");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     announcements: true,
@@ -204,7 +207,7 @@ export default function CourseStudentView({
       const target = window.document.getElementById(sectionId);
       if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-    setDrawerOpen(false);
+    setMobileDrawerOpen(false);
   }
 
   function toggleSection(sectionId: string) {
@@ -227,10 +230,17 @@ export default function CourseStudentView({
           </nav>
           <button
             type="button"
-            onClick={() => setDrawerOpen((prev) => !prev)}
+            onClick={() => setMobileDrawerOpen((prev) => !prev)}
             className="ms-auto rounded border border-slate-300 bg-white px-3 py-1.5 text-[13px] lg:hidden"
           >
-            Course index
+            {mobileDrawerOpen ? "Close index" : "Course index"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDesktopDrawerOpen((prev) => !prev)}
+            className="ms-auto hidden rounded border border-slate-300 bg-white px-3 py-1.5 text-[13px] text-slate-700 hover:bg-slate-50 lg:inline-flex"
+          >
+            {desktopDrawerOpen ? "Hide course index" : "Show course index"}
           </button>
         </div>
       </header>
@@ -248,7 +258,7 @@ export default function CourseStudentView({
       </div>
 
       <div className="mx-auto grid max-w-[1360px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-12">
-        <aside className={`${drawerOpen ? "block" : "hidden"} lg:col-span-3 lg:block`}>
+        <aside className={`${mobileDrawerOpen ? "block" : "hidden"} ${desktopDrawerOpen ? "lg:block" : "lg:hidden"} lg:col-span-3`}>
           <div className="sticky top-20 rounded border border-slate-200 bg-white p-3 shadow-sm">
             <h2 className="mb-3 text-[13px] font-semibold">Course Index</h2>
             <div className="space-y-1.5 text-[13px]">
@@ -286,7 +296,7 @@ export default function CourseStudentView({
           </div>
         </aside>
 
-        <main className="space-y-4 lg:col-span-6">
+        <main className={`space-y-4 ${desktopDrawerOpen ? "lg:col-span-6" : "lg:col-span-9"}`}>
           <section className="overflow-hidden rounded border border-slate-200 bg-white">
             {courseImage ? (
               <div className="h-36 w-full bg-cover bg-center" style={{ backgroundImage: `url(${courseImage})` }} />
@@ -297,6 +307,12 @@ export default function CourseStudentView({
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">{courseTitle}</h1>
               <p className="text-sm text-slate-600">Lecturer: {facilitatorName}</p>
               <p className="text-sm text-slate-600">Semester: {currentYear}</p>
+              {welcomeMessage && (
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Welcome Message</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-emerald-900">{welcomeMessage}</p>
+                </div>
+              )}
               <p className="text-sm text-slate-700">{courseDescription}</p>
             </div>
           </section>

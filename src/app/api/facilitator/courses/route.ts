@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
       shortName,
       category,
       description,
+      welcomeMessage,
       enrollmentKey,
       passMarkPercent,
       published,
@@ -89,6 +90,10 @@ export async function POST(req: NextRequest) {
       shortName,
       category,
       description,
+      welcomeMessage:
+        typeof welcomeMessage === "string" && welcomeMessage.trim()
+          ? welcomeMessage.trim()
+          : undefined,
       facilitator: session.user.id,
       enrollmentKeyHash: hashKey(enrollmentKey),
       passMarkPercent: passMarkPercent || 70,
